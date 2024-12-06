@@ -38,7 +38,7 @@ def element_score(prompt, img_path, element):
         
 
 prompt = 'A photograph of a lady practicing yoga in a quiet studio, full shot.'
-img_path = 'fig/1.png'
+img_path = 'demo/demo.png'
 
 model, vis_processors, text_processors = load_model_and_preprocess("fga_blip2", "coco", device=device, is_eval=True)
 model.load_checkpoint("lavis/output/BLIP2/Alignment_ft_mask/blip2_var_mask_split/20241203120/checkpoint_3.pth")

@@ -33,10 +33,10 @@ datasets:
     build_info:
         annotations:
           train:
-            url: "/mnt/bn/hanshuhao1/mlx/users/hanshuhao/T2IEVAL-40k/benchmark_data/data_train_new_mask.json"
-            storage: /mnt/bn/hanshuhao1/mlx/users/hanshuhao/T2IEVAL-40k/benchmark_data/data_train_new_mask.json
+            url: "dataset/data_train_mask.json"
+            storage: dataset/data_train_mask.json
         images:
-            storage: "/mnt/bn/hanshuhao1/mlx/users/hanshuhao/alignment/data"
+            storage: "dataset/images"
 
 run:
   task: alignment
@@ -55,7 +55,7 @@ run:
   accum_grad_iters: 1
 
   seed: 42
-  output_dir: "output/BLIP2/Alignment_ft_mask/blip2_var_mask_split"
+  output_dir: "output/FGA-BLIP2"
 
   amp: True
   resume_ckpt_path: null

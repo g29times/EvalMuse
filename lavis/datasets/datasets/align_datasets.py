@@ -64,6 +64,9 @@ class AlignmentDataset(BaseDataset, __DisplMixin):
         mask = None
         token_score = None
         if 'mask' in ann:
+            if len(ann['mask']) > 32:
+                ann['mask'] = ann['mask'][:32]
+                ann['token_score'] = ann['token_score'][:32]
             mask = ann['mask'] + [0] * (32 - len(ann['mask']))
             token_score = ann['token_score'] + [0] * (32 - len(ann['token_score']))
             mask[0] = 1
