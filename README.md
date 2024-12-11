@@ -36,7 +36,14 @@ To use the EvalMuse-40K dataset and replicate the experiments, follow these step
    ```
 3. **Download the Dataset and Preprocess the Data**:
    ```bash
+   # Download the dataset from Huggingface
    sh scripts/download.sh
+
+   # Average the annotation scores and calculate the variance of the alignment scores for different image-text pairs corresponding to the same prompt
+   python3 process/process_train.py
+
+   # Corresponds the element split from the prompt to a specific index in the prompt
+   python3 process/element2mask.py
    ```
 4. **Run the Training Scripts**:
    ```bash

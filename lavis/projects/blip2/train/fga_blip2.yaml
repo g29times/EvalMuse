@@ -33,8 +33,8 @@ datasets:
     build_info:
         annotations:
           train:
-            url: "dataset/data_train_mask.json"
-            storage: dataset/data_train_mask.json
+            url: "dataset/train_mask.json"
+            storage: dataset/train_mask.json
         images:
             storage: "dataset/images"
 

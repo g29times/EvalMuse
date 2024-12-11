@@ -36,23 +36,25 @@ def element_score(prompt, img_path, element):
     else:
         return -1
         
+if __name__ == '__main__':
+    model_path = 'checkpoints/fga_blip2.pth'
 
-prompt = 'A photograph of a lady practicing yoga in a quiet studio, full shot.'
-img_path = 'demo/demo.png'
+    prompt = 'A photograph of a lady practicing yoga in a quiet studio, full shot.'
+    img_path = 'demo/demo.png'
 
-model, vis_processors, text_processors = load_model_and_preprocess("fga_blip2", "coco", device=device, is_eval=True)
-model.load_checkpoint("lavis/output/BLIP2/Alignment_ft_mask/blip2_var_mask_split/20241203120/checkpoint_3.pth")
-img = Image.open(img_path).convert('RGB')
-img = vis_processors["eval"](img).unsqueeze(0).to(device)
-txt = text_processors["eval"](prompt)
+    model, vis_processors, text_processors = load_model_and_preprocess("fga_blip2", "coco", device=device, is_eval=True)
+    model.load_checkpoint(model_path)
+    img = Image.open(img_path).convert('RGB')
+    img = vis_processors["eval"](img).unsqueeze(0).to(device)
+    txt = text_processors["eval"](prompt)
 
-itm_scores= model({"image": img, "text_input": txt}, match_head="itm",inference=True)
-# itm_scores = torch.nn.functional.softmax(itm_output, dim=1) * 4 + 1 
-overall_score = itm_scores.item()
-print('overall score: ', overall_score)
+    itm_scores= model({"image": img, "text_input": txt}, match_head="itm",inference=True)
+    # itm_scores = torch.nn.functional.softmax(itm_output, dim=1) * 4 + 1 
+    overall_score = itm_scores.item()
+    print('overall score: ', overall_score)
 
-alignment_score, element_scores = model.element_score(img, txt)
-print('elements score: ', element_scores)
+    alignment_score, element_scores = model.element_score(img, txt)
+    print('elements score: ', element_scores)
 
-alignment_score, element_score = element_score(prompt, img_path, 'a lady')
-print('element "a lady" score: ', element_score)
+    alignment_score, element_score = element_score(prompt, img_path, 'a lady')
+    print('element "a lady" score: ', element_score)

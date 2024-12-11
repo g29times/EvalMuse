@@ -102,7 +102,7 @@ for item in tqdm(data):
 print(len_flow)
 print(len(data))
 print(error)
-with open('dataset/data_train_mask.json', 'w', newline='', encoding='utf-8') as file:
+with open('dataset/train_mask.json', 'w', newline='', encoding='utf-8') as file:
     json.dump(data_new, file, ensure_ascii=False, indent=4)
 
 # with open('dataset/data_train_error.json', 'w', newline='', encoding='utf-8') as file:
