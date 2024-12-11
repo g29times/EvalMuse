@@ -1,12 +1,15 @@
+<div align="center">
+   <h1>EvalMuse-40K: A Reliable and Fine-Grained Benchmark with Comprehensive Human Annotations for Text-to-Image Generation Model Evaluation</h1>
+   <div>
+      <a href="https://github.com/DYEvaLab/EvalMuse"><img src="https://img.shields.io/github/stars/DYEvaLab/EvalMuse"/></a>
+      <a href=""><img src="https://img.shields.io/badge/Arxiv-2309:1418-red"/></a>
+       <a href="https://huggingface.co/datasets/DY-Evalab/EvalMuse"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-green"></a>
+   </div>
+      <p align="center">
+      <img src="assets/images/framework.png" alt="EvalMuse framework">
+   </p>
+</div>
 
-
-# EvalMuse-40K
-
-**EvalMuse-40K: A Reliable and Fine-Grained Benchmark with Comprehensive Human Annotations for Text-to-Image Generation Model Evaluation**
-
-<p align="center">
-  <img src="assets/images/framework.png" alt="EvalMuse Logo">
-</p>
 
 ## Introduction
 EvalMuse-40K is a reliable and fine-grained benchmark designed to evaluate the performance of Text-to-Image (T2I) generation models. It comprises 40,000 image-text pairs with comprehensive human annotations for image-text alignment-related tasks.
@@ -24,8 +27,8 @@ To use the EvalMuse-40K dataset and replicate the experiments, follow these step
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/your-username/EvalMuse-40K.git
-   cd EvalMuse-40K
+   git clone https://github.com/DYEvaLab/EvalMuse
+   cd EvalMuse
    ```
 2. **Install Dependencies**:
    ```bash
@@ -33,16 +36,19 @@ To use the EvalMuse-40K dataset and replicate the experiments, follow these step
    ```
 3. **Download the Dataset and Preprocess the Data**:
    ```bash
-      sh scripts/download.sh
+   sh scripts/download.sh
    ```
 4. **Run the Training Scripts**:
    ```bash
-      sh scripts/train.sh
+   sh scripts/train.sh
    ```
 5. **Evaluate the Models**:
+
+   You can download the pre-trained FGA-BLIP2 model weights from 
+   [[Huggingface]()]
+   or [[Baidu Cloud]()].
    ```bash
-      # You can download the pre-trained models from HuggingFace:
-      sh scripts/eval.sh
+   sh scripts/eval.sh
    ```
 
 
@@ -62,4 +68,4 @@ We welcome contributions to EvalMuse-40K. If you have ideas or bug reports, plea
 
 ## Citation
 
-If you use EvalMuse-40K in your research, please cite our paper:
+If you find EvalMuse-40K useful for your research, please consider cite our paper:

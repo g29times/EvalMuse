@@ -43,7 +43,7 @@ for item in data:
 for item in data:
     # breakpoint()
     prompt_variance = np.var(prompt_scores[item["prompt"]],ddof=1)
-    item["total_score_variance"] = prompt_variance
+    item["var"] = prompt_variance
 
 # Save the updated data into a single JSON file
 with open('dataset/train.json', 'w', encoding='utf-8') as output_file:
