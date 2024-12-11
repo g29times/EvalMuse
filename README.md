@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <div align="center">
    <h1>EvalMuse-40K: A Reliable and Fine-Grained Benchmark with Comprehensive Human Annotations for Text-to-Image Generation Model Evaluation</h1>
    <div>
@@ -77,6 +76,3 @@ We welcome contributions to EvalMuse-40K. If you have ideas or bug reports, plea
 ## Citation
 
 If you find EvalMuse-40K useful for your research, please consider cite our paper:
-=======
-# EvalMuse
->>>>>>> origin/main
