@@ -1,7 +1,7 @@
 <div align="center">
    <h1>EvalMuse-40K: A Reliable and Fine-Grained Benchmark with Comprehensive Human Annotations for Text-to-Image Generation Model Evaluation</h1>
    <div>
-      <a href="https://github.com/DYEvaLab/EvalMuse"><img src="https://img.shields.io/github/stars/DYEvaLab/EvalMuse"/></a>
+      <!-- <a href="https://github.com/DYEvaLab/EvalMuse"><img src="https://img.shields.io/github/stars/DYEvaLab/EvalMuse"/></a> -->
       <a href=""><img src="https://img.shields.io/badge/Arxiv-2309:1418-red"/></a>
        <a href="https://huggingface.co/datasets/DY-Evalab/EvalMuse"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-green"></a>
    </div>
@@ -52,8 +52,8 @@ To use the EvalMuse-40K dataset and replicate the experiments, follow these step
 5. **Evaluate the Models**:
 
    You can download the pre-trained FGA-BLIP2 model weights from 
-   [[Huggingface]()]
-   or [[Baidu Cloud]()].
+   [[Huggingface](https://huggingface.co/hanshuhao/FGA-BLIP2/resolve/main/fga_blip2.pth?download=true)]
+   or [[Baidu Cloud](https://pan.baidu.com/s/1spi1E9AjQ6xNW_Wqufgm9w?pwd=tgyq)].
    ```bash
    sh scripts/eval.sh
    ```

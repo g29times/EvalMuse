@@ -1,1 +1,1 @@
-python3 eval.py --model_path lavis/output/FGA-BLIP2/20241206122/checkpoint_3.pth 
+python3 eval.py
