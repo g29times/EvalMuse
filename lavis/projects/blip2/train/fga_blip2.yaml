@@ -9,13 +9,6 @@ model:
   load_pretrained: True
   load_finetuned: True 
   freeze_vit: True
-  
-  # finetuned: /mnt/bn/hanshuhao1/mlx/users/hanshuhao/LAVIS/lavis/output/BLIP2/Alignment_ft_mask/blip2_var_mask_split/20241015202/checkpoint_4.pth
-  # # finetune blip2 with clip-vit-large
-  # use_grad_checkpoint: False
-  # pretrained: "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_vitL.pth"
-  # vit_model: clip_L  
-
 datasets:
   alignment: # name of the dataset builder
     vis_processor:

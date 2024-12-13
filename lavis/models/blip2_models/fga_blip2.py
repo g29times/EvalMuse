@@ -138,7 +138,7 @@ class FGA_Blip2(Blip2Qformer):
         else:
             with self.maybe_autocast():
                 image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_embeds = image_embeds.float()
+            image_embeds = image_embeds.float()
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
             image.device
         )
@@ -204,7 +204,7 @@ class FGA_Blip2(Blip2Qformer):
             diff_score = torch.abs(itm_score - score)
             diff_token_score = torch.abs(itm_scores[:, query_tokens.size(1):] * mask_gt - token_score).mean(dim=1)
             diff_mask = torch.abs(mask - mask_gt).mean(dim=1)
-            loss_itm = torch.mean(torch.exp(var) * (diff_score + 0.1 * diff_token_score + 0.1 * diff_mask))
+            loss_itm = torch.mean(var * (diff_score + 0.1 * diff_token_score + 0.1 * diff_mask))
             # loss_itm = (itm_scores[:, 1] - score) * (itm_scores[:, 1] - score)
             # breakpoint()
             # loss_itm = loss_itm.mean()
