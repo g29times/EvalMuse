@@ -152,7 +152,7 @@ Our EvalMuse-40K can be used to evaluate the following three tasks, including
 - evaluating the correlation of the fine-grained image-text alignment scores  with human preferences,
 - evaluating the performance of the T2I model on the image-text alignment task.
 
-For evaluating model correlation with human preference, you can download our dataset from [[Huggingface](https://huggingface.co/datasets/DY-Evalab/EvalMuse)]. You can train with our training set (with human-annotated scores) and output the results of the model on the test set. Since the test set we don't provide human-annotated scores right now (they will be available later), you can email XXX.com to submit your result in json format and get the correlation with human preferences.
+For evaluating model correlation with human preference, you can download our dataset from [[Huggingface](https://huggingface.co/datasets/DY-Evalab/EvalMuse)]. You can train with our training set (with human-annotated scores) and output the results of the model on the test set. Since the test set we don't provide human-annotated scores right now (they will be available later), you can email `fanhaotian@bytedance.com` to submit your result in json format and get the correlation with human preferences.
 
 For evaluating the graphical alignment performance of the T2I model, we recommend using FGA-BLIP2, which achieves good performance in both overall alignment and fine-grained alignment.
 
