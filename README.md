@@ -42,7 +42,7 @@
 EvalMuse-40K is a reliable and fine-grained benchmark designed to evaluate the performance of Text-to-Image (T2I) generation models. It comprises 40,000 image-text pairs with comprehensive human annotations for image-text alignment-related tasks.Based on this dataset, we proposed two methods to evaluate t2i alignment automatically: FGA-BLIP2 and PN-VQA.
    </div>
       <p align="center">
-      <img src="assets/images/EvalMuse-40k.png" alt="EvalMuse framework">
+      <img src="assets/images/EvalMuse-40k.png" alt="EvalMuse dataset">
    </p>
 </div>
 
