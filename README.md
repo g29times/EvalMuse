@@ -33,14 +33,18 @@
 ## :fire: Updates
 - [13/12/2024] **Codes and Dataset** released: We releaded the traning part of evalmuse dataset(30k) and code of fga-blip2, which acheived SOTA performance in T2I model alignment evaluation.
 - [25/12/2024]
-   - **EvalMuse-40k Report** released: [![EvalMuse Report (arXiv)](https://img.shields.io/badge/EvalMuse-arXiv%20Report-b31b1b?logo=arxiv&logoColor=red)](https://arxiv.org/abs/2412.18150).You can find our technical report on arxiv<br/>
+   - **EvalMuse-40k Report** released: [![EvalMuse Report (arXiv)](https://img.shields.io/badge/EvalMuse-arXiv%20Report-b31b1b?logo=arxiv&logoColor=red)](https://arxiv.org/abs/2412.18150).You can find our technical report on arxiv.<br/>
    - **EvalMuse Leaderboard** released: [![EvalMuse Leaderboard (Website)](https://img.shields.io/badge/EvalMuse-Leaderboard-green?logo=socialblade&logoColor=green)](https://shh-han.github.io/EvalMuse-Leaderboard/#/). You can find EvalMuse leaderboard on our website.The leaderboard contains three tracks: T2I alignment metric ranking, T2I fidelity metric ranking and T2I model alignment abality ranking.
 
 
 <a name="introduction"></a>
 ### Introduction
 EvalMuse-40K is a reliable and fine-grained benchmark designed to evaluate the performance of Text-to-Image (T2I) generation models. It comprises 40,000 image-text pairs with comprehensive human annotations for image-text alignment-related tasks.Based on this dataset, we proposed two methods to evaluate t2i alignment automatically: FGA-BLIP2 and PN-VQA.
-
+   </div>
+      <p align="center">
+      <img src="assets/images/EvalMuse-40k.png" alt="EvalMuse framework">
+   </p>
+</div>
 
 <a name="keyfeatures"></a>
 ### Key Features
