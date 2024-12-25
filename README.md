@@ -145,7 +145,7 @@ The table reports the overall image-text alignment scores and fine-grained align
 | SD v1.2              | 2.25         | 0.659     | 0.515    | 0.315    | 0.471   | 0.377    | 0.393  | 0.498  | 0.547 | 0.349    | 0.493   | 0.181    |
 
 
-## Submission Gudideline
+## Submission Guideline
 
 Our EvalMuse-40K can be used to evaluate the following three tasks, including 
 - evaluating the correlation of the overall image-text alignment scores with human preferences, 
