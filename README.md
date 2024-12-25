@@ -18,8 +18,8 @@
 
 ### Table of Contents
 - [Updates](#updates)
-- [Key Features](#keyfeatures)
 - [Introduction](#introduction)
+- [Key Features](#keyfeatures)
 - [Getting Started](#gettingstarted)
 - [Data Statistics](#datastatistics)
 - [Submission Gudideline](#submission_gudide_line)
