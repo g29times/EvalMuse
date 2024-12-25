@@ -179,8 +179,10 @@ The table reports the overall image-text alignment scores and fine-grained align
 | SD v1.5              | 2.25         | 0.671     | 0.534    | 0.328    | 0.470   | 0.337    | 0.372  | 0.487  | 0.500 | 0.352    | 0.488   | 0.180    |
 | SD v1.2              | 2.25         | 0.659     | 0.515    | 0.315    | 0.471   | 0.377    | 0.393  | 0.498  | 0.547 | 0.349    | 0.493   | 0.181    |
 
+
 <a name="submission_gudide_line"></a>
 ## Submission Gudideline
+
 
 Our EvalMuse-40K can be used to evaluate the following three tasks, including 
 - evaluating the correlation of the overall image-text alignment scores with human preferences, 
@@ -189,11 +191,13 @@ Our EvalMuse-40K can be used to evaluate the following three tasks, including
 
 For evaluating model correlation with human preference, you can download our dataset from [[Huggingface](https://huggingface.co/datasets/DY-Evalab/EvalMuse)]. You can train with our training set (with human-annotated scores) and output the results of the model on the test set. Since the test set we don't provide human-annotated scores right now (they will be available later), you can email `fanhaotian@bytedance.com` to submit your result in json format and get the correlation with human preferences.
 
-For evaluating the graphical alignment performance of the T2I model, we recommend using FGA-BLIP2, which achieves good performance in both overall alignment and fine-grained alignment.
-<a name="evaluation_method_toolkit"></a>
 
+For evaluating the image-text alignment performance of the T2I model, we recommend using FGA-BLIP2, which achieves good performance in both overall alignment and fine-grained alignment.
+
+<a name="evaluation_method_toolkit"></a>
 ## Evaluation Method Toolkit
 TBD
+
 
 
 <a name="contributing"></a>
