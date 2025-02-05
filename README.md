@@ -31,6 +31,7 @@
 
 <a name="updates"></a>
 ## :fire: Updates
+- [05/02/2025] **Our Dataset has been used in CVPR NTIRE Grand Challenge 2025!**: Two tracks are held based on our dataset EvalMuse, [Image-Text Alignment](https://codalab.lisn.upsaclay.fr/competitions/21220) and [Structure Distortion Detection](https://codalab.lisn.upsaclay.fr/competitions/21269). Welcome to participate! Tens of thousands of bonuses are prepared for top ranks(sponsor by ByteDance).
 - [13/12/2024] **Codes and Dataset** released: We releaded the traning part of evalmuse dataset(30k) and code of fga-blip2, which acheived SOTA performance in T2I model alignment evaluation.
 - [25/12/2024]
    - **EvalMuse-40k Report** released: [![EvalMuse Report (arXiv)](https://img.shields.io/badge/EvalMuse-arXiv%20Report-b31b1b?logo=arxiv&logoColor=red)](https://arxiv.org/abs/2412.18150).You can find our technical report on arxiv.<br/>
