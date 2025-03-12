@@ -53,37 +53,25 @@ def eval(args):
     # 分批处理数据
     for i in tqdm(range(0, len(data), batch_size)):
         batch_data = data[i:i+batch_size]
-        batch_images = []
-        batch_prompts = []
-        batch_prompt_ids = []
         
-        # 预处理批次数据
+        # 批量预处理
         for item in batch_data:
+            elements = item['element_score'].keys()
             prompt = item['prompt']
-            image_path = os.path.join(args.dataset_dir, item['img_path'])
             
+            image_path = os.path.join(args.dataset_dir, item['img_path'])
             image = Image.open(image_path).convert("RGB")
             image = vis_processors["eval"](image).to(device)
-            batch_images.append(image)
             
             processed_prompt = text_processors["eval"](prompt)
-            batch_prompts.append(processed_prompt)
-            batch_prompt_ids.append(tokenizer(prompt).input_ids)
-        
-        # 批量推理 - 改为逐个处理样本
-        torch.cuda.empty_cache()
-        
-        for j, item in enumerate(batch_data):
+            prompt_ids = tokenizer(prompt).input_ids
+            
+            # 单个样本推理
+            torch.cuda.empty_cache()
             with torch.no_grad():
-                # 逐个处理每个样本
-                single_image = batch_images[j].unsqueeze(0)  # 添加批次维度
-                single_prompt = [batch_prompts[j]]  # 转为列表，因为模型期望列表输入
-                
-                alignment_score, scores = model.element_score(single_image, single_prompt)
+                alignment_score, scores = model.element_score(image.unsqueeze(0), [processed_prompt])
             
-            elements = item['element_score'].keys()
-            prompt_ids = batch_prompt_ids[j]
-            
+            # 处理元素评分
             elements_score = dict()
             for element in elements:
                 element_ = element.rpartition('(')[0]
@@ -91,14 +79,27 @@ def eval(args):
                 
                 idx = get_index(element_ids, prompt_ids)
                 if idx:
-                    mask = [0] * len(prompt_ids)
-                    mask[idx:idx+len(element_ids)] = [1] * len(element_ids)
+                    # 确保掩码长度与分数张量匹配
+                    scores_len = scores.shape[1]
+                    
+                    # 检查掩码是否会超出分数张量的长度
+                    if idx >= scores_len:
+                        elements_score[element] = 0
+                        continue
+                    
+                    # 调整掩码长度以匹配分数张量
+                    mask = [0] * scores_len
+                    end_idx = min(idx + len(element_ids), scores_len)
+                    mask[idx:end_idx] = [1] * (end_idx - idx)
                     
                     mask = torch.tensor(mask).to(device)
-                    elements_score[element] = ((scores * mask).sum() / mask.sum()).item()
+                    if mask.sum() > 0:  # 避免除零错误
+                        elements_score[element] = ((scores * mask).sum() / mask.sum()).item()
+                    else:
+                        elements_score[element] = 0
                 else:
                     elements_score[element] = 0
-                    
+            
             item['score_result'] = alignment_score.item() if isinstance(alignment_score, torch.Tensor) else alignment_score
             item['element_result'] = elements_score
             result_list.append(item)
