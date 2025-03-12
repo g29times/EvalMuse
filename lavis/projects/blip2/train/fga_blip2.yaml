@@ -10,7 +10,7 @@ model:
   load_pretrained: True
   freeze_vit: True
   num_query_token: 32
-  vit_precision: "fp32"
+  vit_precision: "fp16"
   image_size: 364
 
 datasets:
