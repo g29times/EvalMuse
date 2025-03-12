@@ -456,55 +456,106 @@ class RunnerBase:
             return test_logs
 
     def train_epoch(self, epoch):
-        # train
+        # 训练一个epoch
+        metric_logger = MetricLogger(delimiter="  ")
+        metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
+        metric_logger.add_meter("loss", SmoothedValue(window_size=1, fmt="{value:.4f}"))
+        metric_logger.add_meter("loss_itm", SmoothedValue(window_size=1, fmt="{value:.4f}"))
+
+        header = 'Train Epoch: [{}]'.format(epoch)
+        
+        if self.cuda_enabled:
+            torch.cuda.reset_peak_memory_stats()
+
         self.model.train()
+        
+        for i, batch in enumerate(metric_logger.log_every(self.train_loader, self.log_freq, header)):
+            # 记录当前学习率
+            current_lr = self.lr_scheduler.get_last_lr()[0]
+            metric_logger.update(lr=current_lr)
+            
+            samples = batch["samples"]
+            targets = batch["targets"]
+            
+            with torch.cuda.amp.autocast(enabled=self.cuda_enabled):
+                loss, loss_itm = self.model(samples, targets)
+                loss = loss / self.accum_grad_iters
+                
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                if (i + 1) % self.accum_grad_iters == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+            else:
+                loss.backward()
+                if (i + 1) % self.accum_grad_iters == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+            
+            metric_logger.update(loss=loss.item() * self.accum_grad_iters)
+            metric_logger.update(loss_itm=loss_itm.item())
+            
+            # 每个batch都记录到wandb
+            if is_main_process() and self._callback is not None:
+                self._callback({
+                    "train/loss": loss.item() * self.accum_grad_iters,
+                    "train/loss_itm": loss_itm.item(),
+                    "train/lr": current_lr,
+                    "train/epoch": epoch,
+                    "train/step": i
+                })
 
-        return self.task.train_epoch(
-            epoch=epoch,
-            model=self.model,
-            data_loader=self.train_loader,
-            optimizer=self.optimizer,
-            scaler=self.scaler,
-            lr_scheduler=self.lr_scheduler,
-            cuda_enabled=self.cuda_enabled,
-            log_freq=self.log_freq,
-            accum_grad_iters=self.accum_grad_iters,
-        )
+            self.lr_scheduler.step()
 
-    @torch.no_grad()
+        # 记录GPU内存使用
+        if self.cuda_enabled:
+            max_mem = torch.cuda.max_memory_allocated() / 1024 / 1024
+            metric_logger.update(max_mem=max_mem)
+
+        metric_logger.synchronize_between_processes()
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
     def eval_epoch(self, split_name, cur_epoch, skip_reload=False):
-        """
-        Evaluate the model on a given split.
-
+        """评估一个epoch。
+        
         Args:
-            split_name (str): name of the split to evaluate on.
-            cur_epoch (int): current epoch.
-            skip_reload_best (bool): whether to skip reloading the best checkpoint.
-                During training, we will reload the best checkpoint for validation.
-                During testing, we will use provided weights and skip reloading the best checkpoint .
+            split_name: 评估的数据集分割名
+            cur_epoch: 当前epoch
+            skip_reload: 是否跳过重新加载最佳模型
         """
-        data_loader = self.dataloaders.get(split_name, None)
-        assert data_loader, "data_loader for split {} is None.".format(split_name)
-
-        # TODO In validation, you need to compute loss as well as metrics
-        # TODO consider moving to model.before_evaluation()
         model = self.unwrap_dist_model(self.model)
-        if not skip_reload and cur_epoch == "best":
-            model = self._reload_best_model(model)
         model.eval()
 
-        self.task.before_evaluation(
-            model=model,
-            dataset=self.datasets[split_name],
-        )
-        results = self.task.evaluation(model, data_loader)
+        metric_logger = MetricLogger(delimiter="  ")
+        metric_logger.add_meter("plcc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
+        metric_logger.add_meter("srcc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
+        metric_logger.add_meter("acc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
+        header = f'Evaluation Epoch: [{cur_epoch}]'
 
-        if results is not None:
-            return self.task.after_evaluation(
-                val_result=results,
-                split_name=split_name,
-                epoch=cur_epoch,
-            )
+        with torch.no_grad():
+            for i, batch in enumerate(metric_logger.log_every(self.dataloaders[split_name], self.log_freq, header)):
+                samples = batch["samples"]
+                targets = batch["targets"]
+                
+                plcc, srcc, acc = self.model.evaluate(samples, targets)
+                
+                metric_logger.update(plcc=plcc)
+                metric_logger.update(srcc=srcc)
+                metric_logger.update(acc=acc)
+                
+                # 每个batch都记录到wandb
+                if is_main_process() and self._callback is not None:
+                    self._callback({
+                        f"{split_name}/plcc": plcc,
+                        f"{split_name}/srcc": srcc,
+                        f"{split_name}/acc": acc,
+                        f"{split_name}/epoch": cur_epoch,
+                        f"{split_name}/step": i
+                    })
+
+        metric_logger.synchronize_between_processes()
+        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
     def unwrap_dist_model(self, model):
         if self.use_distributed:
