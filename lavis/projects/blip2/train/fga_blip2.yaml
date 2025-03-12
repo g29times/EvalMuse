@@ -25,8 +25,8 @@ datasets:
           url: dataset/train_mask.json
           storage: dataset/train_mask.json
         test:
-          url: dataset/train_mask.json
-          storage: dataset/train_mask.json
+          url: dataset/test.json
+          storage: dataset/test.json
       images:
         storage: dataset/images
     vis_processor:
