@@ -90,4 +90,33 @@
     [x] 数据预处理完成（train.json, train_mask.json）
     [x] 目录结构正确
     [x] 训练脚本配置正确
-    [x] 预训练模型是否已下载到checkpoints目录
+    [x] 预训练模型已下载到checkpoints目录
+
+环境配置问题解决：
+    1. 基础安装：
+        pip install -e .  # 以开发模式安装项目
+        pip install wandb  # 安装wandb用于监控训练
+
+    2. 解决OpenCV依赖：
+        # 在服务器上安装无GUI版本
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-glx
+        pip install opencv-python-headless
+
+    3. wandb配置：
+        export WANDB_API_KEY=你的API密钥
+
+    4. 运行训练：
+        # 测试基本导入
+        python3 -c "import torch; import lavis; import cv2; print('All imports successful!')"
+        
+        # 训练脚本参数说明
+        python3 -u -m torch.distributed.run \
+            --nnodes=1 \                    # 使用1个节点
+            --nproc_per_node=1 \           # 每个节点1个进程（GPU数量）
+            --master_port=10000 \          # 主进程端口号
+            train.py \                     # 训练脚本
+            --cfg-path lavis/projects/blip2/train/fga_blip2.yaml  # 配置文件
+        
+        # 启动训练
+        sh scripts/train.sh
