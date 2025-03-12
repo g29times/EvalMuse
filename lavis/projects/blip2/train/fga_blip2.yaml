@@ -19,11 +19,11 @@ datasets:
     build_info:
       annotations:
         train:
-          url: dataset/train_mask.json
-          storage: dataset/train_mask.json
+          url: dataset/train_split.json
+          storage: dataset/train_split.json
         val:
-          url: dataset/train_mask.json
-          storage: dataset/train_mask.json
+          url: dataset/val_split.json
+          storage: dataset/val_split.json
         test:
           url: dataset/test.json
           storage: dataset/test.json
