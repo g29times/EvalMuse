@@ -8,6 +8,7 @@
 import argparse
 import os
 import random
+import wandb
 
 import numpy as np
 import torch
@@ -72,22 +73,32 @@ def get_runner_class(cfg):
 
 
 def main():
-    # allow auto-dl completes on main process without timeout when using NCCL backend.
-    # os.environ["NCCL_BLOCKING_WAIT"] = "1"
+    # 初始化wandb
+    wandb.init(
+        project="evalmuse-competition",
+        config={
+            "architecture": "FGA-BLIP2",
+            "dataset": "NITRE2025",
+        }
+    )
 
-    # set before init_distributed_mode() to ensure the same job_id shared across all ranks.
     job_id = now()
-
     cfg = Config(parse_args())
 
     init_distributed_mode(cfg.run_cfg)
-
     setup_seeds(cfg)
-
-    # set after init_distributed_mode() to only log on master.
     setup_logger()
 
     cfg.pretty_print()
+
+    # 添加配置到wandb
+    wandb.config.update({
+        "learning_rate": cfg.run_cfg.init_lr,
+        "epochs": cfg.run_cfg.max_epoch,
+        "batch_size": cfg.run_cfg.batch_size_train,
+        "warmup_steps": cfg.run_cfg.warmup_steps,
+        "weight_decay": cfg.run_cfg.weight_decay,
+    })
 
     task = tasks.setup_task(cfg)
     datasets = task.build_datasets(cfg)
@@ -96,7 +107,15 @@ def main():
     runner = get_runner_class(cfg)(
         cfg=cfg, job_id=job_id, task=task, model=model, datasets=datasets
     )
-    runner.train()
+    
+    # 添加wandb回调
+    def log_metrics(metrics):
+        wandb.log(metrics)
+    
+    runner.train(callback=log_metrics)
+
+    # 结束wandb
+    wandb.finish()
 
 
 if __name__ == "__main__":

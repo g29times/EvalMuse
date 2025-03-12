@@ -1,0 +1,93 @@
+我们的情况：
+项目定位：
+    这是EvalMuse竞赛的参赛项目
+    基于官方基线模型FGA-BLIP2进行优化
+    目标是提高图文对齐评估的得分
+当前阶段（Pre-dev）：
+    在Windows上搭建基本环境，确保代码可以运行
+    这只是准备阶段，实际训练和开发会在Linux服务器上进行
+    Windows环境主要用于代码阅读和简单测试
+资源获取：
+    数据集：从Huggingface下载
+    预训练模型：可以从两个地方下载
+    Huggingface: https://huggingface.co/hanshuhao/FGA-BLIP2/resolve/main/fga_blip2.pth
+    百度网盘: https://pan.baidu.com/s/1spi1E9AjQ6xNW_Wqufgm9w (密码:tgyq)
+基本流程：
+    数据准备 -> 环境配置 -> 模型训练 -> 评估优化
+    当前阶段 ↑     后续Linux服务器阶段 ↑
+
+项目结构和后续工作计划：
+    核心代码结构：
+    lavis/: 基础模型库，包含BLIP2和FGA-BLIP2的实现
+    process/: 数据预处理脚本
+    process_train.py: 处理标注分数和计算对齐分数方差
+    element2mask.py: 将prompt中的元素映射到特定索引
+    train.py: 模型训练主脚本
+    eval.py: 模型评估脚本
+    demo/: 演示代码
+    utils.py: 通用工具函数
+
+    竞赛评估指标：
+    SRCC（排序相关系数）
+    PLCC（线性相关系数）
+    Accuracy（元素级预测准确率）
+    最终分数 = PLCC/4 + SRCC/4 + acc/2
+
+    工作计划：
+    当前阶段（Windows）：
+    [x] 项目代码分析
+    [x] 环境依赖确认
+    [x] 竞赛规则理解
+
+    Linux服务器阶段：
+    [ ] 数据集下载和预处理
+    [ ] 预训练模型部署
+    [ ] 基线模型评估
+    [ ] 模型优化方案设计
+
+在迁移到Ubuntu服务器时注意：
+
+确保服务器Python版本为3.10（我们之前分析过依赖兼容性）
+使用原始的bash脚本（scripts/download.sh）而不是我们的Windows版本
+按照README.md中的步骤顺序执行：
+    # 1. 下载数据集
+    sh scripts/download.sh
+
+    # 2. 数据预处理
+    python3 process/process_train.py
+    python3 process/element2mask.py
+
+    # 3. 下载预训练模型到checkpoints/并训练
+    # 从huggingface或百度网盘下载fga_blip2.pth放在 checkpoints 目录下
+    sh scripts/train.sh
+
+    # 4. 运行评估
+    sh scripts/eval.sh
+
+先运行基线训练
+    当前配置是比较保守的：
+        4个epoch
+        学习率1e-5，warmup步数100
+        batch size 14
+        冻结视觉编码器
+    这些参数适合快速得到一个基线结果
+数据分析（训练同时进行）
+    # 分析数据分布
+    - 统计标注方差的分布
+    - 分析real/synthetic提示词的比例
+    - 统计不同类型元素（对象、属性等）的分布
+根据基线结果决定改进方向
+    如果基线效果差（PLCC/SRCC < 0.7）：
+        优先调整训练参数（学习率、epoch数）
+        考虑解冻部分视觉编码器层
+    如果基线效果一般（0.7-0.8）：
+        实现样本加权（根据标注方差）
+        添加数据增强
+    如果基线效果不错（>0.8）：
+        专注于改进mask生成机制
+        添加元素关系建模
+当前准备工作检查
+    [x] 数据预处理完成（train.json, train_mask.json）
+    [x] 目录结构正确
+    [x] 训练脚本配置正确
+    [x] 预训练模型是否已下载到checkpoints目录

@@ -61,8 +61,10 @@ class RunnerBase:
         self._lr_sched = None
 
         self.start_epoch = 0
+        
+        # 回调函数
+        self._callback = None
 
-        # self.setup_seeds()
         self.setup_output_dir()
 
     @property
@@ -361,7 +363,15 @@ class RunnerBase:
         self.result_dir = result_dir
         self.output_dir = output_dir
 
-    def train(self):
+    def train(self, callback=None):
+        """训练模型。
+
+        Args:
+            callback (callable, optional): 回调函数，用于记录训练过程中的指标。
+                函数签名应为 callback(metrics: dict)。
+        """
+        self._callback = callback
+        
         start_time = time.time()
         best_agg_metric = 0
         best_epoch = 0
@@ -376,14 +386,15 @@ class RunnerBase:
             # training phase
             if not self.evaluate_only:
                 logging.info("Start training")
-                # See https://github.com/salesforce/LAVIS/issues/449
-                # if cur_epoch == self.start_epoch:
-                #     self.task.before_training(
-                #         model=self.unwrap_dist_model(self.model),
-                #         dataset=self.datasets["train"],
-                #     )
                 train_stats = self.train_epoch(cur_epoch)
                 self.log_stats(split_name="train", stats=train_stats)
+                
+                # 记录训练指标
+                if self._callback is not None:
+                    self._callback({
+                        "epoch": cur_epoch,
+                        "train": train_stats
+                    })
 
             # evaluation phase
             if len(self.valid_splits) > 0 and (self.evaluate_only or cur_epoch%self.val_freq == 0):
@@ -400,35 +411,34 @@ class RunnerBase:
                             ), "No agg_metrics found in validation log."
 
                             agg_metrics = val_log["agg_metrics"]
-                            if agg_metrics > best_agg_metric and split_name == "val":
+                            if agg_metrics > best_agg_metric:
                                 best_epoch, best_agg_metric = cur_epoch, agg_metrics
-                                if not self.evaluate_only:
-                                    self._save_checkpoint(cur_epoch, is_best=True)
+                                self._save_checkpoint(cur_epoch, is_best=True)
 
                             val_log.update({"best_epoch": best_epoch})
                             self.log_stats(val_log, split_name)
+                            
+                            # 记录验证指标
+                            if self._callback is not None:
+                                self._callback({
+                                    "epoch": cur_epoch,
+                                    f"val_{split_name}": val_log
+                                })
 
-            else:
-                # if no validation split is provided, we just save the checkpoint at the end of each epoch.
-                if not self.evaluate_only:
-                    self._save_checkpoint(cur_epoch, is_best=False)
-
-            if self.evaluate_only:
-                break
-
-            # save checkpoint according to save freq
-            if self.save_freq>0 and cur_epoch%self.save_freq == 0:
+            if not self.evaluate_only and self.save_last and (cur_epoch + 1) % self.save_freq == 0:
                 self._save_checkpoint(cur_epoch, is_best=False)
 
             dist.barrier()
 
-        # save last checkpoint
-        if self.save_last and not self.evaluate_only:
-            self._save_checkpoint(cur_epoch, is_best=False)
-
         # testing phase
-        test_epoch = "best" if len(self.valid_splits) > 0 else cur_epoch
-        self.evaluate(cur_epoch=test_epoch, skip_reload=self.evaluate_only)
+        test_stats = self.evaluate(cur_epoch=best_epoch)
+        if test_stats is not None:
+            # 记录测试指标
+            if self._callback is not None:
+                self._callback({
+                    "epoch": "best",
+                    "test": test_stats
+                })
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
