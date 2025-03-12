@@ -62,7 +62,7 @@ class RunnerBase:
 
         self.start_epoch = 0
         
-        # 回调函数
+        # wandb回调函数，用于记录训练指标
         self._callback = None
 
         self.setup_output_dir()
@@ -383,21 +383,24 @@ class RunnerBase:
             self._load_checkpoint(self.resume_ckpt_path)
 
         for cur_epoch in range(self.start_epoch, self.max_epoch):
+            # 记录当前epoch
+            if is_main_process() and self._callback is not None:
+                self._callback({"epoch": cur_epoch})
+
             # training phase
             if not self.evaluate_only:
                 logging.info("Start training")
+                # See https://github.com/salesforce/LAVIS/issues/449
+                # if cur_epoch == self.start_epoch:
+                #     self.task.before_training(
+                #         model=self.unwrap_dist_model(self.model),
+                #         dataset=self.datasets["train"],
+                #     )
                 train_stats = self.train_epoch(cur_epoch)
-                self.log_stats(split_name="train", stats=train_stats)
-                
-                # 记录训练指标
-                if self._callback is not None:
-                    self._callback({
-                        "epoch": cur_epoch,
-                        "train": train_stats
-                    })
+                self.log_stats(train_stats, "train")
 
             # evaluation phase
-            if len(self.valid_splits) > 0 and (self.evaluate_only or cur_epoch%self.val_freq == 0):
+            if len(self.valid_splits) > 0 and (self.evaluate_only or cur_epoch % self.val_freq == 0):
                 for split_name in self.valid_splits:
                     logging.info("Evaluating on {}.".format(split_name))
                     
@@ -411,38 +414,48 @@ class RunnerBase:
                             ), "No agg_metrics found in validation log."
 
                             agg_metrics = val_log["agg_metrics"]
-                            if agg_metrics > best_agg_metric:
+                            if agg_metrics > best_agg_metric and split_name == "val":
                                 best_epoch, best_agg_metric = cur_epoch, agg_metrics
-                                self._save_checkpoint(cur_epoch, is_best=True)
+                                if not self.evaluate_only:
+                                    self._save_checkpoint(cur_epoch, is_best=True)
 
                             val_log.update({"best_epoch": best_epoch})
                             self.log_stats(val_log, split_name)
-                            
-                            # 记录验证指标
-                            if self._callback is not None:
-                                self._callback({
-                                    "epoch": cur_epoch,
-                                    f"val_{split_name}": val_log
-                                })
 
-            if not self.evaluate_only and self.save_last and (cur_epoch + 1) % self.save_freq == 0:
+            else:
+                # if no validation split is provided, we just save the checkpoint at the end of each epoch.
+                if not self.evaluate_only:
+                    self._save_checkpoint(cur_epoch, is_best=False)
+
+            if self.evaluate_only:
+                break
+
+            # save checkpoint according to save freq
+            if self.save_freq > 0 and cur_epoch% self.save_freq == 0:
                 self._save_checkpoint(cur_epoch, is_best=False)
 
             dist.barrier()
 
+        # save last checkpoint
+        if self.save_last and not self.evaluate_only:
+            self._save_checkpoint(cur_epoch, is_best=False)
+
         # testing phase
-        test_stats = self.evaluate(cur_epoch=best_epoch)
-        if test_stats is not None:
-            # 记录测试指标
-            if self._callback is not None:
-                self._callback({
-                    "epoch": "best",
-                    "test": test_stats
-                })
+        test_epoch = "best" if len(self.valid_splits) > 0 else cur_epoch
+        self.evaluate(cur_epoch=test_epoch, skip_reload=self.evaluate_only)
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         logging.info("Training time {}".format(total_time_str))
+
+        # wandb 添加总体指标记录
+        if is_main_process() and self._callback is not None:
+            self._callback({
+                "train/total_time": total_time,
+                "train/total_time_str": total_time_str,
+                "train/best_epoch": best_epoch,
+                "train/best_agg_metric": best_agg_metric
+            })
 
     def evaluate(self, cur_epoch="best", skip_reload=False):
         test_logs = dict()
@@ -456,106 +469,55 @@ class RunnerBase:
             return test_logs
 
     def train_epoch(self, epoch):
-        # 训练一个epoch
-        metric_logger = MetricLogger(delimiter="  ")
-        metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
-        metric_logger.add_meter("loss", SmoothedValue(window_size=1, fmt="{value:.4f}"))
-        metric_logger.add_meter("loss_itm", SmoothedValue(window_size=1, fmt="{value:.4f}"))
-
-        header = 'Train Epoch: [{}]'.format(epoch)
-        
-        if self.cuda_enabled:
-            torch.cuda.reset_peak_memory_stats()
-
+        # train
         self.model.train()
         
-        for i, batch in enumerate(metric_logger.log_every(self.train_loader, self.log_freq, header)):
-            # 记录当前学习率
-            current_lr = self.lr_scheduler.get_last_lr()[0]
-            metric_logger.update(lr=current_lr)
-            
-            samples = batch["samples"]
-            targets = batch["targets"]
-            
-            with torch.cuda.amp.autocast(enabled=self.cuda_enabled):
-                loss, loss_itm = self.model(samples, targets)
-                loss = loss / self.accum_grad_iters
-                
-            if self.scaler is not None:
-                self.scaler.scale(loss).backward()
-                if (i + 1) % self.accum_grad_iters == 0:
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad()
-            else:
-                loss.backward()
-                if (i + 1) % self.accum_grad_iters == 0:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
-            
-            metric_logger.update(loss=loss.item() * self.accum_grad_iters)
-            metric_logger.update(loss_itm=loss_itm.item())
-            
-            # 每个batch都记录到wandb
-            if is_main_process() and self._callback is not None:
-                self._callback({
-                    "train/loss": loss.item() * self.accum_grad_iters,
-                    "train/loss_itm": loss_itm.item(),
-                    "train/lr": current_lr,
-                    "train/epoch": epoch,
-                    "train/step": i
-                })
+        return self.task.train_epoch(
+            epoch=epoch,
+            model=self.model,
+            data_loader=self.train_loader,
+            optimizer=self.optimizer,
+            scaler=self.scaler,
+            lr_scheduler=self.lr_scheduler,
+            cuda_enabled=self.cuda_enabled,
+            log_freq=self.log_freq,
+            accum_grad_iters=self.accum_grad_iters,
+        )
 
-            self.lr_scheduler.step()
-
-        # 记录GPU内存使用
-        if self.cuda_enabled:
-            max_mem = torch.cuda.max_memory_allocated() / 1024 / 1024
-            metric_logger.update(max_mem=max_mem)
-
-        metric_logger.synchronize_between_processes()
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
+    @torch.no_grad()
     def eval_epoch(self, split_name, cur_epoch, skip_reload=False):
-        """评估一个epoch。
+        """
+        Evaluate the model on a given split.
         
         Args:
-            split_name: 评估的数据集分割名
-            cur_epoch: 当前epoch
-            skip_reload: 是否跳过重新加载最佳模型
+            split_name (str): name of the split to evaluate on.
+            cur_epoch (int): current epoch.
+            skip_reload_best (bool): whether to skip reloading the best checkpoint.
+                During training, we will reload the best checkpoint for validation.
+                During testing, we will use provided weights and skip reloading the best checkpoint .
         """
+        data_loader = self.dataloaders.get(split_name, None)
+        assert data_loader, "data_loader for split {} is None.".format(split_name)
+
+        # TODO In validation, you need to compute loss as well as metrics
+        # TODO consider moving to model.before_evaluation()
         model = self.unwrap_dist_model(self.model)
+        if not skip_reload and cur_epoch == "best":
+            model = self._reload_best_model(model)
         model.eval()
 
-        metric_logger = MetricLogger(delimiter="  ")
-        metric_logger.add_meter("plcc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
-        metric_logger.add_meter("srcc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
-        metric_logger.add_meter("acc", SmoothedValue(window_size=1, fmt="{value:.4f}"))
-        header = f'Evaluation Epoch: [{cur_epoch}]'
+        self.task.before_evaluation(
+            model=model,
+            dataset=self.datasets[split_name],
+        )
+        results = self.task.evaluation(model, data_loader)
 
-        with torch.no_grad():
-            for i, batch in enumerate(metric_logger.log_every(self.dataloaders[split_name], self.log_freq, header)):
-                samples = batch["samples"]
-                targets = batch["targets"]
-                
-                plcc, srcc, acc = self.model.evaluate(samples, targets)
-                
-                metric_logger.update(plcc=plcc)
-                metric_logger.update(srcc=srcc)
-                metric_logger.update(acc=acc)
-                
-                # 每个batch都记录到wandb
-                if is_main_process() and self._callback is not None:
-                    self._callback({
-                        f"{split_name}/plcc": plcc,
-                        f"{split_name}/srcc": srcc,
-                        f"{split_name}/acc": acc,
-                        f"{split_name}/epoch": cur_epoch,
-                        f"{split_name}/step": i
-                    })
-
-        metric_logger.synchronize_between_processes()
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+        if results is not None:
+            return self.task.after_evaluation(
+                val_result=results,
+                split_name=split_name,
+                epoch=cur_epoch,
+            )
 
     def unwrap_dist_model(self, model):
         if self.use_distributed:
@@ -720,10 +682,23 @@ class RunnerBase:
 
     @main_process
     def log_stats(self, stats, split_name):
+        """记录统计信息到日志和wandb（如果启用）。"""
         if isinstance(stats, dict):
+            # 原有的日志记录逻辑
             log_stats = {**{f"{split_name}_{k}": v for k, v in stats.items()}}
             with open(os.path.join(self.output_dir, "log.txt"), "a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+
+            # wandb记录（只记录数值类型的指标）
+            if self._callback is not None:
+                wandb_stats = {}
+                for k, v in stats.items():
+                    if isinstance(v, (int, float)):
+                        # 使用/分隔符以获得更好的指标组织
+                        wandb_stats[f"{split_name}/{k}"] = v
+                if wandb_stats:
+                    self._callback(wandb_stats)
+        
         elif isinstance(stats, list):
             pass
 
