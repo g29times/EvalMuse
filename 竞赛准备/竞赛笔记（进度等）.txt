@@ -211,3 +211,47 @@
                 - 训练过程分析
                 - 验证集性能评估
                 - 改进建议
+
+
+官方代码存在的问题
+    数据集不一致：
+    配置文件使用train_mask.json
+    评估脚本使用test.json
+    这可能导致训练和评估使用不同的数据
+    命名混淆：
+    配置文件中将test放在valid_splits中
+    代码中期望val在valid_splits中
+    这导致了最佳模型检查点的保存逻辑失效
+
+数据集分析
+数据集格式：
+    JSON格式，包含图像提示、路径和评分信息
+    每个数据项包含：
+    prompt_id：提示ID
+    prompt：文本提示描述
+    type：类型（如"real"）
+    img_path：图像路径
+    total_score：总评分（训练集有值，测试集为null）
+    element_score：各元素评分（如"puffin (animal)"）
+数据集差异：
+    train_mask.json：训练集，包含已标注的评分
+    test.json：测试集，评分字段为null（需要模型预测）
+文件路径问题：
+    配置文件中所有数据集都指向train_mask.json
+    评估脚本默认使用test.json
+    这种不一致可能导致训练和评估使用不同的数据
+
+评估流程理解
+训练过程：
+    使用train_mask.json作为训练数据
+    由于配置问题，验证也使用train_mask.json
+    由于split_name == "val"条件不满足，不会保存最佳模型
+评估过程：
+    使用eval.py脚本
+    加载模型和测试数据集test.json
+    对每个图像-文本对计算对齐分数
+    计算每个元素的分数
+    保存结果到JSON文件
+得分计算：
+    最终分数 = PLCC/4 + SRCC/4 + acc/2
+    需要使用utils.py中的compute_metrics函数计算

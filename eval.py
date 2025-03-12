@@ -46,49 +46,69 @@ def is_sublist(lst1, lst2):
 
 def eval(args):
     data = load_data(args.data_file, 'json')
-    data_new = []
     model, vis_processors, text_processors = load_model_and_preprocess("fga_blip2", "coco", device=device, is_eval=True)
     model.load_checkpoint(args.model_path)
     model.eval()
 
-
+    # 批处理大小
+    batch_size = args.batch_size
     result_list = []
-    for item in tqdm(data):
-        elements = item['element_score'].keys()
-        prompt = item['prompt']
+    
+    # 分批处理数据
+    for i in tqdm(range(0, len(data), batch_size)):
+        batch_data = data[i:i+batch_size]
+        batch_images = []
+        batch_prompts = []
+        batch_prompt_ids = []
         
-        image = os.path.join(args.dataset_dir, item['img_path'])
-
-        image = Image.open(image).convert("RGB")
-        image = vis_processors["eval"](image).to(device)
-        prompt = text_processors["eval"](prompt)
-        prompt_ids = tokenizer(prompt).input_ids
-        # breakpoint()
-
+        # 预处理批次数据
+        for item in batch_data:
+            prompt = item['prompt']
+            image_path = os.path.join(args.dataset_dir, item['img_path'])
+            
+            image = Image.open(image_path).convert("RGB")
+            image = vis_processors["eval"](image).to(device)
+            batch_images.append(image)
+            
+            processed_prompt = text_processors["eval"](prompt)
+            batch_prompts.append(processed_prompt)
+            batch_prompt_ids.append(tokenizer(prompt).input_ids)
+        
+        # 将图像堆叠为批次
+        batch_images = torch.stack(batch_images)
+        
+        # 批量推理
         torch.cuda.empty_cache()
         with torch.no_grad():
-            alignment_score, scores = model.element_score(image.unsqueeze(0),[prompt])
-
-        elements_score = dict()
-        for element in elements:
-            element_ = element.rpartition('(')[0]
-            element_ids = tokenizer(element_).input_ids[1:-1]
-            # breakpoint()
-
-            idx = get_index(element_ids,prompt_ids)
-            # breakpoint()
-            if idx:
-                mask = [0] * len(prompt_ids)
-                mask[idx:idx+len(element_ids)] = [1] * len(element_ids)
+            batch_alignment_scores, batch_scores = model.element_score(batch_images, batch_prompts)
+        
+        # 处理每个样本的结果
+        for j, item in enumerate(batch_data):
+            elements = item['element_score'].keys()
+            prompt_ids = batch_prompt_ids[j]
+            alignment_score = batch_alignment_scores[j] if isinstance(batch_alignment_scores, torch.Tensor) else batch_alignment_scores
+            scores = batch_scores[j]
+            
+            elements_score = dict()
+            for element in elements:
+                element_ = element.rpartition('(')[0]
+                element_ids = tokenizer(element_).input_ids[1:-1]
                 
-                mask = torch.tensor(mask).to(device)
-                elements_score[element] = ((scores * mask).sum() / mask.sum()).item()
-            else:
-                elements_score[element] = 0
-        item['score_result'] = alignment_score.item()
-        item['element_result'] = elements_score
-
-        result_list.append(item)
+                idx = get_index(element_ids, prompt_ids)
+                if idx:
+                    mask = [0] * len(prompt_ids)
+                    mask[idx:idx+len(element_ids)] = [1] * len(element_ids)
+                    
+                    mask = torch.tensor(mask).to(device)
+                    elements_score[element] = ((scores * mask).sum() / mask.sum()).item()
+                else:
+                    elements_score[element] = 0
+                    
+            item['score_result'] = alignment_score.item() if isinstance(alignment_score, torch.Tensor) else alignment_score
+            item['element_result'] = elements_score
+            result_list.append(item)
+    
+    # 保存结果
     with open(args.save_path, 'w', newline='', encoding='utf-8') as file:
         json.dump(result_list, file, ensure_ascii=False, indent=4)
 
@@ -98,8 +118,6 @@ if __name__ == '__main__':
     parser.add_argument('--save_path', type=str, default='results/result.json')
     parser.add_argument('--model_path', type=str, default='checkpoints/fga_blip2.pth')
     parser.add_argument('--dataset_dir', type=str, default='dataset/images/')
+    parser.add_argument('--batch_size', type=int, default=16, help='批处理大小，根据GPU内存调整')
     args = parser.parse_args()
     eval(args)
-    
-
-

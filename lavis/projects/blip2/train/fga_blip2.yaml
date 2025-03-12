@@ -53,14 +53,14 @@ run:
   warmup_lr: 1e-8
   warmup_steps: 100
   weight_decay: 0.05
-  max_epoch: 2
+  max_epoch: 5
   batch_size_train: 32
   batch_size_eval: 32
   num_workers: 4
   
   # 评估和保存设置
   seed: 42
-  evaluate: False
+  evaluate: False # 不进行评估
   save_freq: 1
   
   # 分布式训练设置

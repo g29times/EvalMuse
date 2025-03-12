@@ -382,7 +382,9 @@ class RunnerBase:
         if not self.evaluate_only and self.resume_ckpt_path is not None:
             self._load_checkpoint(self.resume_ckpt_path)
 
-        for cur_epoch in range(self.start_epoch, self.max_epoch):
+        cur_epoch = self.start_epoch  # 初始化cur_epoch
+        for epoch in range(self.start_epoch, self.max_epoch):
+            cur_epoch = epoch  # 更新cur_epoch
             # 记录当前epoch
             if is_main_process() and self._callback is not None:
                 self._callback({"epoch": cur_epoch})
