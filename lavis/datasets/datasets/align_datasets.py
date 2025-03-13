@@ -61,6 +61,18 @@ class AlignmentDataset(BaseDataset, __DisplMixin):
         if 'var' in ann:
             var = ann['var']
 
+        # 加载置信度指标
+        split_confidence = 0.0
+        attribute_confidence = 1.0
+        prompt_meaningless = 0.0
+        
+        if 'split_confidence' in ann:
+            split_confidence = ann['split_confidence']
+        if 'attribute_confidence' in ann:
+            attribute_confidence = ann['attribute_confidence']
+        if 'promt_meaningless' in ann:  # 注意原始数据中的拼写错误
+            prompt_meaningless = ann['promt_meaningless']
+
         mask = None
         token_score = None
         if 'mask' in ann:
@@ -72,7 +84,8 @@ class AlignmentDataset(BaseDataset, __DisplMixin):
             mask[0] = 1
             token_score[0] = (score - 1) / 4
         # score = torch.tensor(score)
-        return {"image": image, "text_input": caption, "score": score, "mask":mask, "token_score":token_score, 'var': var}
+        return {"image": image, "text_input": caption, "score": score, "mask":mask, "token_score":token_score, 'var': var, 
+                'split_confidence': split_confidence, 'attribute_confidence': attribute_confidence, 'prompt_meaningless': prompt_meaningless}
     
 class AlignmentEvalDataset(BaseDataset, __DisplMixin):
     def __init__(self, vis_processor, text_processor, vis_root, ann_paths):
@@ -96,4 +109,3 @@ class AlignmentEvalDataset(BaseDataset, __DisplMixin):
         score = np.mean(ann['total_score'])
 
         return {"image": image, "text_input": caption, "score": score}
-

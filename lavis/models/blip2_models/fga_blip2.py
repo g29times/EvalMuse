@@ -134,6 +134,12 @@ class FGA_Blip2(Blip2Qformer):
             token_score = torch.tensor(samples["token_score"]).to(image.device)
             score = torch.tensor(samples["score"]).to(image.device)
             var = torch.tensor(samples["var"]).to(image.device)
+            
+            # 获取置信度指标
+            split_confidence = torch.tensor(samples["split_confidence"]).to(image.device)
+            attribute_confidence = torch.tensor(samples["attribute_confidence"]).to(image.device)
+            prompt_meaningless = torch.tensor(samples["prompt_meaningless"]).to(image.device)
+            
             image_embeds = self.ln_vision(self.visual_encoder(image))
         else:
             with self.maybe_autocast():
@@ -204,10 +210,13 @@ class FGA_Blip2(Blip2Qformer):
             diff_score = torch.abs(itm_score - score)
             diff_token_score = torch.abs(itm_scores[:, query_tokens.size(1):] * mask_gt - token_score).mean(dim=1)
             diff_mask = torch.abs(mask - mask_gt).mean(dim=1)
-            loss_itm = torch.mean(var * (diff_score + 0.3 * diff_token_score + 0.3 * diff_mask))
-            # loss_itm = (itm_scores[:, 1] - score) * (itm_scores[:, 1] - score)
-            # breakpoint()
-            # loss_itm = loss_itm.mean()
+            
+            # 计算置信度权重
+            confidence_weight = (1 - split_confidence) * attribute_confidence * (1 - prompt_meaningless)
+            
+            # 使用置信度权重和var共同加权损失
+            loss_itm = torch.mean(var * confidence_weight * (diff_score + 0.3 * diff_token_score + 0.3 * diff_mask))
+            
             return BlipOutput(loss=loss_itm, loss_itm=loss_itm)
 
             ############## stage 2 #################
