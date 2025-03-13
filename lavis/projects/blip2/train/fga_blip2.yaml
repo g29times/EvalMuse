@@ -20,10 +20,10 @@ datasets:
       annotations:
         train:
           url: dataset/train_split.json
-          storage: dataset/train_split.json
+          storage: dataset/train_split_95.json
         val:
           url: dataset/val_split.json
-          storage: dataset/val_split.json
+          storage: dataset/val_split_05.json
         test:
           url: dataset/test.json
           storage: dataset/test.json
@@ -53,7 +53,7 @@ run:
   warmup_lr: 1e-8
   warmup_steps: 100
   weight_decay: 0.05
-  max_epoch: 5
+  max_epoch: 8
   batch_size_train: 32
   batch_size_eval: 32
   num_workers: 4
