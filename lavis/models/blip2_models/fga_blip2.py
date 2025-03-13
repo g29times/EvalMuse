@@ -212,7 +212,7 @@ class FGA_Blip2(Blip2Qformer):
             diff_mask = torch.abs(mask - mask_gt).mean(dim=1)
             
             # 计算置信度权重
-            confidence_weight = (1 - split_confidence) * attribute_confidence * (1 - prompt_meaningless)
+            confidence_weight = 0.5 + 0.5 * ((1 - split_confidence) * attribute_confidence * (1 - prompt_meaningless))
             
             # 使用置信度权重和var共同加权损失
             loss_itm = torch.mean(var * confidence_weight * (diff_score + 0.3 * diff_token_score + 0.3 * diff_mask))

@@ -6,9 +6,9 @@
 model:
   arch: fga_blip2
   model_type: coco
-  load_finetuned: True
-  load_pretrained: True
-  freeze_vit: True
+  load_finetuned: True # 使用微调权重
+  load_pretrained: True # 使用预训练权重
+  freeze_vit: True # 冻结ViT
   num_query_token: 32
   vit_precision: "fp16"
   image_size: 364
@@ -44,8 +44,8 @@ datasets:
 
 run:
   task: alignment
-  # 设置为第一次训练的最后一轮checkpoint
-  resume_ckpt_path: "output/FGA-BLIP2/20250312072/checkpoint_3.pth"
+  # 从头训练，不使用之前的checkpoint
+  # resume_ckpt_path: "output/FGA-BLIP2/20250312072/checkpoint_3.pth"
   
   # 优化器设置
   init_lr: 1e-5
@@ -53,9 +53,9 @@ run:
   warmup_lr: 1e-8
   warmup_steps: 100
   weight_decay: 0.05
-  max_epoch: 8
-  batch_size_train: 32
-  batch_size_eval: 32
+  max_epoch: 8 # 已扩大 表示全部训练的记录上限 而不是每次训练的最多epoch 比如训练了两次 第一次3个epoch 第二次4个epoch 则max_epoch=8>(3+4=7) 启动第三次训练时才能正常训练
+  batch_size_train: 32 # 已扩大
+  batch_size_eval: 32 # 已扩大
   num_workers: 4
   
   # 评估和保存设置
