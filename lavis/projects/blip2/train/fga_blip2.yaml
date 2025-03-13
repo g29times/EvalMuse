@@ -78,6 +78,6 @@ run:
   lr_layer_decay: 0.95 # layer-wise learning rate decay for the ViT 
   output_dir: "output/FGA-BLIP2"
   train_splits: ["train"]
-  valid_splits: ["test"]
-  # test_splits: ["test"]
+  valid_splits: ["val"]
+  test_splits: ["test"]
   k_test: 128
