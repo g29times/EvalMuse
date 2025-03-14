@@ -124,9 +124,9 @@ def eval(args):
                     alignment_score = torch.tensor([3.0]).to(device)  # 默认中等分数
                     scores = torch.zeros(1, len(prompt_ids)).to(device)
             
-            # 计算每个元素的得分
-            elements_score = {}
-            element_found_count = 0
+            # 处理每个元素
+            element_scores = {}
+            found_elements = 0
             
             for element in elements:
                 element_name = element.rpartition('(')[0].strip()
@@ -139,7 +139,7 @@ def eval(args):
                 idx = get_index(element_ids, prompt_ids)
                 
                 if idx is not None:
-                    element_found_count += 1
+                    found_elements += 1
                     
                     # 创建掩码，标记元素在提示中的位置
                     mask = torch.zeros(len(prompt_ids)).to(device)
@@ -154,27 +154,16 @@ def eval(args):
                         # 如果scores长度足够，只使用与prompt_ids对应的部分
                         used_scores = scores[0, :len(prompt_ids)]
                         
-                        # 检查是否需要归一化scores
-                        # 如果scores的值很小或很大，可能需要归一化
-                        if used_scores.max() > 10 or used_scores.min() < -10:
-                            # 使用softmax归一化
-                            used_scores = torch.softmax(used_scores, dim=0)
-                        elif used_scores.max() > 1 and used_scores.min() >= 0:
-                            # 如果是正值且大于1，可能需要归一化到0-1范围
-                            used_scores = used_scores / used_scores.max()
-                        
-                        # 计算元素得分
+                        # 直接使用模型返回的对应位置的分数
                         if mask.sum() > 0:
+                            # 获取元素对应位置的平均分数
                             element_score = ((used_scores * mask).sum() / mask.sum()).item()
                             
-                            # 如果得分太小，可能需要缩放
-                            if element_score < 0.1:
-                                # 缩放到1-5范围，保持与总分的相对关系
-                                element_score = 1.0 + 4.0 * (element_score / used_scores.max().item())
+                            # 确保元素得分在0-1范围内
+                            element_score = max(0.0, min(1.0, element_score))
                         else:
-                            # 掩码和为0，使用备选方法
-                            random_factor = torch.rand(1).item() * 0.4 + 0.8
-                            element_score = alignment_score.item() * random_factor
+                            # 掩码和为0，使用默认得分
+                            element_score = 0.5
                     else:
                         # 如果scores长度不足，使用可用部分
                         if args.verbose >= 2 and i == 0:
@@ -184,35 +173,23 @@ def eval(args):
                         truncated_mask = mask[:scores.shape[1]]
                         if truncated_mask.sum() > 0:
                             element_score = ((scores[0, :] * truncated_mask).sum() / truncated_mask.sum()).item()
+                            element_score = max(0.0, min(1.0, element_score))
                         else:
-                            # 如果截断后的掩码没有覆盖元素，使用基于总分的备选方法
-                            random_factor = torch.rand(1).item() * 0.4 + 0.8
-                            element_score = alignment_score.item() * random_factor
+                            # 如果截断后的掩码没有覆盖元素，使用默认得分
+                            element_score = 0.5
                 else:
-                    # 元素未找到，给一个较低的分数
-                    random_factor = torch.rand(1).item() * 0.3 + 0.3
-                    element_score = alignment_score.item() * random_factor
+                    # 元素未找到，给一个默认得分
+                    element_score = 0.0
                 
-                # 确保元素得分在合理范围内 (1-5)
-                element_score = max(1.0, min(5.0, element_score))
-                
-                # 打印调试信息
-                if args.verbose >= 3 and i < 5:  # 只为前5个样本打印详细信息
-                    print(f"元素: {element}, 得分: {element_score:.2f}")
-                    if idx is not None:
-                        print(f"  位置: {idx}, 长度: {len(element_ids)}")
-                        print(f"  掩码和: {mask.sum().item()}")
-                        if scores.shape[1] >= len(prompt_ids):
-                            print(f"  分数和: {(used_scores * mask).sum().item()}")
-                
-                elements_score[element] = element_score
+                # 保存元素得分
+                element_scores[element] = element_score
             
             # 创建输出项
             output_item = {
                 "prompt": prompt,
                 "img_path": item['img_path'],
                 "total_score": alignment_score.item(),
-                "element_score": elements_score
+                "element_score": element_scores
             }
             
             output_results.append(output_item)
@@ -223,12 +200,12 @@ def eval(args):
                 print(f"样本ID: {item.get('prompt_id', 'unknown')}")
                 print(f"提示词: {prompt[:50]}...")
                 print(f"总分: {alignment_score.item():.2f}")
-                print(f"找到元素数量: {element_found_count}/{len(elements)}")
+                print(f"找到元素数量: {found_elements}/{len(elements)}")
                 
                 # 打印元素得分
-                if element_found_count > 0:
+                if found_elements > 0:
                     print("元素得分样例:")
-                    for j, (element, score) in enumerate(elements_score.items()):
+                    for j, (element, score) in enumerate(element_scores.items()):
                         if j < 3:  # 只打印前3个元素
                             print(f"  - {element}: {score:.2f}")
                 else:
@@ -236,7 +213,7 @@ def eval(args):
             
             # 简单进度报告
             if args.verbose == 1 and i % 100 == 0:
-                print(f"进度: {i}/{len(data)} ({i/len(data)*100:.1f}%) - 找到元素: {element_found_count}/{len(elements)}")
+                print(f"进度: {i}/{len(data)} ({i/len(data)*100:.1f}%) - 找到元素: {found_elements}/{len(elements)}")
                 
             # 每处理指定间隔样本保存一次中间结果
             if i > 0 and i % args.save_interval == 0:
