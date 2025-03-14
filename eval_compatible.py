@@ -80,12 +80,33 @@ def eval(args):
         
         # 批量推理
         with torch.no_grad():
-            samples = {"image": batch_images, "text_input": batch_captions}
-            scores = model(samples, inference=True)
+            # 创建一个包含必要字段的samples字典
+            samples = {
+                "image": batch_images, 
+                "text_input": batch_captions,
+                # 添加一个默认的score字段，避免KeyError
+                "score": torch.ones(len(batch_images)).to(device)
+            }
+            
+            # 修改模型的forward方法调用
+            try:
+                # 尝试使用inference=True参数
+                scores = model(samples, inference=True)
+            except Exception as e:
+                print(f"使用inference=True参数失败: {e}")
+                try:
+                    # 如果失败，尝试使用match_head="itm"参数
+                    scores, _ = model.element_score(samples["image"], samples["text_input"])
+                except Exception as e2:
+                    print(f"使用element_score方法失败: {e2}")
+                    print("尝试直接调用模型...")
+                    scores = model(samples)
             
             # 确保scores是CPU张量并转换为Python列表
             if isinstance(scores, torch.Tensor):
                 scores = scores.cpu().tolist()
+            elif isinstance(scores, tuple) and isinstance(scores[0], torch.Tensor):
+                scores = scores[0].cpu().tolist()
         
         # 保存结果
         for j, item in enumerate(batch_data):

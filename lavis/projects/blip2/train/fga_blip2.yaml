@@ -48,7 +48,7 @@ run:
   # resume_ckpt_path: "output/FGA-BLIP2/20250312072/checkpoint_3.pth"
   
   # 优化器设置
-  init_lr: 1e-5
+  init_lr: 4e-5
   min_lr: 1e-6
   warmup_lr: 1e-8
   warmup_steps: 100

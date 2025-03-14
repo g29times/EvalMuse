@@ -110,9 +110,9 @@ def eval(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_file', type=str, default='dataset/test.json')
+    parser.add_argument('--data_file', type=str, default='dataset/val_split.json')
     parser.add_argument('--save_path', type=str, default='results/result.json')
-    parser.add_argument('--model_path', type=str, default='checkpoints/fga_blip2.pth')
+    parser.add_argument('--model_path', type=str, default='checkpoints/best.pth')
     parser.add_argument('--dataset_dir', type=str, default='dataset/images/')
     parser.add_argument('--batch_size', type=int, default=16, help='批处理大小，根据GPU利用率调整')
     args = parser.parse_args()
