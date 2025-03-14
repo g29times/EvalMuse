@@ -178,7 +178,7 @@ class FGA_Blip2(Blip2Qformer):
                 image_feat_all, text_feat_all, query_tokens.size(1), mask_pred
             )
 
-            return itm_score
+            return itm_score, mask
 
     def compute_itm(self, image_feat, text_feat, query_token_len, mask):
         itm_scores = torch.bmm(image_feat, text_feat.transpose(1, 2))
