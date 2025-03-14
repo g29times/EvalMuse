@@ -83,9 +83,16 @@ class AlignmentDataset(BaseDataset, __DisplMixin):
             token_score = ann['token_score'] + [0] * (32 - len(ann['token_score']))
             mask[0] = 1
             token_score[0] = (score - 1) / 4
+        
+        # 传递元素得分信息
+        element_score = None
+        if 'element_score' in ann:
+            element_score = ann['element_score']
+            
         # score = torch.tensor(score)
         return {"image": image, "text_input": caption, "score": score, "mask":mask, "token_score":token_score, 'var': var, 
-                'split_confidence': split_confidence, 'attribute_confidence': attribute_confidence, 'prompt_meaningless': prompt_meaningless}
+                'split_confidence': split_confidence, 'attribute_confidence': attribute_confidence, 
+                'prompt_meaningless': prompt_meaningless, 'element_score': element_score}
     
 class AlignmentEvalDataset(BaseDataset, __DisplMixin):
     def __init__(self, vis_processor, text_processor, vis_root, ann_paths):

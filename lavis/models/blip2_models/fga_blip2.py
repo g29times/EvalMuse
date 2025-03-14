@@ -20,13 +20,13 @@ class MLP(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(self.input_size, 256),
             nn.ReLU(),
-            # nn.Dropout(0.2),
+            nn.Dropout(0.2),
             nn.Linear(256, 128),
             nn.ReLU(),
-            # nn.Dropout(0.2),
+            nn.Dropout(0.2),
             nn.Linear(128, 64),
             nn.ReLU(),
-            # nn.Dropout(0.1),
+            nn.Dropout(0.1),
             nn.Linear(64, 16),
             nn.ReLU(),
             nn.Linear(16, 1)
@@ -86,136 +86,213 @@ class FGA_Blip2(Blip2Qformer):
         # for name, parms in self.named_parameters():
         #     if '_proj' not in name:
         #         parms.requires_grad_(False)
+    
+    def extract_element_type(self, element_name):
+        """从元素名称中提取类型"""
+        if "(" in element_name and ")" in element_name:
+            return element_name.split("(")[1].split(")")[0]
+        return "unknown"
+    
+    def calculate_element_weights(self, element_names, device):
+        """根据元素类型分配权重"""
+        weights = torch.ones(len(element_names), dtype=torch.float).to(device)
         
+        for i, name in enumerate(element_names):
+            element_type = self.extract_element_type(name)
+            if element_type in ["counting", "number"]:
+                weights[i] = 1.5  # 增加计数类元素的权重
+            elif element_type == "activity":
+                weights[i] = 1.3  # 增加活动类元素的权重
+            elif element_type in ["spatial", "position", "relation"]:
+                weights[i] = 1.3  # 增加空间关系元素的权重
+            elif element_type == "attribute":
+                weights[i] = 0.9  # 略微降低属性类元素的权重（因为数量多）
+            elif element_type == "object":
+                weights[i] = 0.9  # 略微降低物体类元素的权重（因为数量多）
+        
+        return weights
+    
+    def get_element_thresholds(self, element_names, device):
+        """为不同元素类型设置不同的阈值"""
+        thresholds = torch.ones(len(element_names), dtype=torch.float).to(device) * 0.5  # 默认阈值0.5
+        
+        for i, name in enumerate(element_names):
+            element_type = self.extract_element_type(name)
+            if element_type in ["counting", "number"]:
+                thresholds[i] = 0.6  # 计数类元素需要更高的阈值
+            elif element_type == "activity":
+                thresholds[i] = 0.55  # 活动类元素需要稍高的阈值
+            elif element_type in ["spatial", "position", "relation"]:
+                thresholds[i] = 0.55  # 空间关系需要稍高的阈值
+        
+        return thresholds
+
     def element_score(self, image, caption):
         with self.maybe_autocast():
             image_embeds = self.ln_vision(self.visual_encoder(image))
-        image_embeds = image_embeds.float()
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
-        # breakpoint()
-        text = self.tokenizer(
-            caption,
-            # padding="max_length",
-            truncation=False,
-            max_length=self.max_txt_len,
-            return_tensors="pt",
-        ).to(image.device)
-
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
-        attention_mask = torch.cat([query_atts, text.attention_mask], dim=1)
-        output_itm = self.Qformer.bert(
-            text.input_ids,
-            query_embeds=query_tokens,
-            attention_mask=attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            return_dict=True,
-        )
-        itm_embeddings = output_itm.last_hidden_state[:, :, :]
-        itm_logit = self.itm_head(itm_embeddings)
-        itm_scores = torch.nn.functional.softmax(itm_logit, dim=2)[:,:,1]
-        # itm_score = (itm_scores * mask).sum(dim=1) / mask.sum(dim=1)
-        alignment_score = itm_scores[:, :query_tokens.size(1)].mean(dim=1) * 4 + 1
-
-        return alignment_score, itm_scores[:, query_tokens.size(1):]
-
-    def forward(self, samples, match_head="itm", inference = False):
-        # breakpoint()
-        image = samples["image"]
-        caption = samples["text_input"]
-        
-        if inference == False:
-            mask_gt = torch.tensor(samples["mask"]).to(image.device)
-            token_score = torch.tensor(samples["token_score"]).to(image.device)
-            score = torch.tensor(samples["score"]).to(image.device)
-            var = torch.tensor(samples["var"]).to(image.device)
-            
-            # 获取置信度指标
-            split_confidence = torch.tensor(samples["split_confidence"]).to(image.device)
-            attribute_confidence = torch.tensor(samples["attribute_confidence"]).to(image.device)
-            prompt_meaningless = torch.tensor(samples["prompt_meaningless"]).to(image.device)
-            
-            image_embeds = self.ln_vision(self.visual_encoder(image))
-        else:
-            with self.maybe_autocast():
-                image_embeds = self.ln_vision(self.visual_encoder(image))
-            image_embeds = image_embeds.float()
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
-            image.device
-        )
-        # breakpoint()
-        text = self.tokenizer(
-            caption,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_txt_len,
-            return_tensors="pt",
-        ).to(image.device)
-
-        if match_head == "itm":
-            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(
+            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
                 image.device
             )
-            attention_mask = torch.cat([query_atts, text.attention_mask], dim=1)
-            output_itm = self.Qformer.bert(
-                text.input_ids,
+
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+
+            query_output = self.Qformer.bert(
                 query_embeds=query_tokens,
-                attention_mask=attention_mask,
                 encoder_hidden_states=image_embeds,
                 encoder_attention_mask=image_atts,
                 return_dict=True,
             )
-            itm_embeddings = output_itm.last_hidden_state[:, :, :]
-            itm_logit = self.itm_head(itm_embeddings)
-            itm_scores = torch.nn.functional.softmax(itm_logit, dim=2)[:,:,1]
 
+            query_feat = F.normalize(
+                self.vision_proj(query_output.last_hidden_state), dim=-1
+            )
 
-            # mask = self.mask_proj(itm_embeddings).squeeze(dim=2)
-            # mask = torch.sigmoid(mask)
-            # mask = mask * text.attention_mask
-
-
-            # mask = torch.sigmoid(mask)
-            # mask = mask * text.attention_mask
-            # ############## stage 1 #################
             text_output = self.Qformer.bert(
-                text.input_ids,
-                attention_mask=text.attention_mask,
+                caption.input_ids,
+                attention_mask=caption.attention_mask,
                 return_dict=True,
             )
+            text_feat = F.normalize(
+                self.text_proj(text_output.last_hidden_state), dim=-1
+            )
+
+            image_feat_all = query_feat
+            text_feat_all = text_feat
+
             mask = self.mask_proj(text_output.last_hidden_state).squeeze(dim=2)
-            itm_score = itm_scores[:, :query_tokens.size(1)].mean(dim=1) * 4 + 1
-            # itm_score = (itm_scores * mask).sum(dim=1) / mask.sum(dim=1) * 4 + 1
-            # itm_logit = (itm_logit * mask).sum(dim=1) / mask.sum(dim=1)
-            # breakpoint()
-            # itm_scores = torch.nn.functional.softmax(itm_logit, dim=1) * 4 + 1
+            mask = torch.sigmoid(mask)
             
-            # breakpoint()
-            # itm_scores = self.mlp(itm_embeddings).mean(dim=1) * 4 + 1
+            # 使用默认阈值0.5
+            mask_pred = (mask > 0.5).float()
+            
+            itm_score, itm_scores = self.compute_itm(
+                image_feat_all, text_feat_all, query_tokens.size(1), mask_pred
+            )
+
+            return itm_score
+
+    def compute_itm(self, image_feat, text_feat, query_token_len, mask):
+        itm_scores = torch.bmm(image_feat, text_feat.transpose(1, 2))
+        itm_scores = itm_scores[:, query_token_len:, :] - itm_scores[:, :query_token_len, :]
+        itm_scores = itm_scores[:, :, 0]
+        itm_score = itm_scores.mean(dim=1) * 4 + 1
+
+        return itm_score, itm_scores
+
+    def forward(self, samples, match_head="itm", inference = False):
+        image = samples["image"]
+        caption = samples["text_input"]
+        
+        if match_head == "itm":
+            score = samples["score"]
+            mask_gt = None
+            token_score = None
+            var = None
+            split_confidence = 0.0
+            attribute_confidence = 1.0
+            prompt_meaningless = 0.0
+            
+            if 'mask' in samples:
+                mask_gt = torch.tensor(samples['mask']).to(image.device).float()
+                token_score = torch.tensor(samples['token_score']).to(image.device).float()
+            if 'var' in samples:
+                var = torch.tensor(samples['var']).to(image.device).float()
+            else:
+                var = torch.ones(image.size(0)).to(image.device).float()
+            
+            if 'split_confidence' in samples:
+                split_confidence = torch.tensor(samples['split_confidence']).to(image.device).float()
+            if 'attribute_confidence' in samples:
+                attribute_confidence = torch.tensor(samples['attribute_confidence']).to(image.device).float()
+            if 'prompt_meaningless' in samples:
+                prompt_meaningless = torch.tensor(samples['prompt_meaningless']).to(image.device).float()
+            
+            # 提取元素名称和得分（如果有）
+            element_names = []
+            if 'element_score' in samples and samples['element_score'] is not None:
+                for key in samples['element_score']:
+                    element_names.append(key)
+            
+            with self.maybe_autocast():
+                image_embeds = self.ln_vision(self.visual_encoder(image))
+                image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
+                    image.device
+                )
+
+                query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=image_embeds,
+                    encoder_attention_mask=image_atts,
+                    return_dict=True,
+                )
+
+                query_feat = F.normalize(
+                    self.vision_proj(query_output.last_hidden_state), dim=-1
+                )
+
+                text_output = self.Qformer.bert(
+                    caption.input_ids,
+                    attention_mask=caption.attention_mask,
+                    return_dict=True,
+                )
+                text_feat = F.normalize(
+                    self.text_proj(text_output.last_hidden_state), dim=-1
+                )
+
+                image_feat_all = query_feat
+                text_feat_all = text_feat
+
+                mask = self.mask_proj(text_output.last_hidden_state).squeeze(dim=2)
+                mask = torch.sigmoid(mask)
+                
+                itm_score, itm_scores = self.compute_itm(
+                    image_feat_all, text_feat_all, query_tokens.size(1), mask
+                )
+            
             if inference:
-                # mask = torch.cat([torch.ones(mask.shape).to(mask.device),mask.detach() > 0.5],dim=1)
-                # itm_score = (itm_scores * mask).sum(dim=1) / mask.sum(dim=1) * 4 + 1
-                
-                # mask = mask.detach() > 0.5
-                # itm_score = (itm_scores[:, query_tokens.size(1):] * mask).sum(dim=1) / mask.sum(dim=1) * 4 + 1
-                
                 return itm_score
+                
             l1_loss = torch.nn.L1Loss(reduction='mean')
             diff_score = torch.abs(itm_score - score)
-            diff_token_score = torch.abs(itm_scores[:, query_tokens.size(1):] * mask_gt - token_score).mean(dim=1)
+            
+            # 计算元素类型权重
+            if element_names:
+                element_weights = self.calculate_element_weights(element_names, image.device)
+                # 应用元素权重到token级别的损失计算中
+                diff_token_score = torch.abs(itm_scores * mask_gt - token_score)
+                
+                # 创建一个权重矩阵，将元素权重扩展到batch维度
+                batch_size = diff_token_score.shape[0]
+                token_weights = torch.ones_like(diff_token_score)
+                
+                # 对于每个样本，应用相应的元素权重
+                for i in range(batch_size):
+                    # 只对有mask的token应用权重（mask_gt > 0的位置）
+                    token_weights[i] = torch.where(mask_gt[i] > 0, 
+                                                 element_weights.unsqueeze(0).expand(diff_token_score.shape[1], -1)[0], 
+                                                 torch.ones_like(diff_token_score[i]))
+                
+                # 应用权重并计算平均损失
+                weighted_diff_token = (diff_token_score * token_weights).sum(dim=1) / (token_weights * mask_gt).sum(dim=1).clamp(min=1.0)
+            else:
+                # 如果没有元素信息，使用原始计算方式
+                weighted_diff_token = torch.abs(itm_scores * mask_gt - token_score).mean(dim=1)
+            
             diff_mask = torch.abs(mask - mask_gt).mean(dim=1)
             
             # 计算置信度权重
             confidence_weight = 0.5 + 0.5 * ((1 - split_confidence) * attribute_confidence * (1 - prompt_meaningless))
             
-            # 使用置信度权重和var共同加权损失
-            loss_itm = torch.mean(var * confidence_weight * (diff_score + 0.3 * diff_token_score + 0.3 * diff_mask))
+            # 调整损失函数权重比例：降低整体分数权重，提高元素级评估权重
+            loss_itm = torch.mean(var * confidence_weight * (0.2 * diff_score + 0.5 * weighted_diff_token + 0.3 * diff_mask))
+            
+            # 添加L2正则化
+            l2_reg = 0.0
+            for param in self.mask_proj.parameters():
+                l2_reg += torch.norm(param)
+            loss_itm = loss_itm + 1e-5 * l2_reg
             
             return BlipOutput(loss=loss_itm, loss_itm=loss_itm)
 
@@ -247,8 +324,7 @@ class FGA_Blip2(Blip2Qformer):
             # # loss_itm = (itm_scores[:, 1] - score) * (itm_scores[:, 1] - score)
             # # breakpoint()
             # # loss_itm = loss_itm.mean()
-            # return BlipOutput(loss=loss_itm, loss_itm=loss_itm)
-        elif match_head == "itc":
+            # return BlipOutput(loss=loss_itm, loss_itm=loss_itm)        elif match_head == "itc":
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
             query_output = self.Qformer.bert(
@@ -262,8 +338,8 @@ class FGA_Blip2(Blip2Qformer):
             )
 
             text_output = self.Qformer.bert(
-                text.input_ids,
-                attention_mask=text.attention_mask,
+                caption.input_ids,
+                attention_mask=caption.attention_mask,
                 return_dict=True,
             )
             # text_feat = F.normalize(
