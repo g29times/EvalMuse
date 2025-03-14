@@ -201,6 +201,10 @@ class FGA_Blip2(Blip2Qformer):
         
         if match_head == "itm":
             score = samples["score"]
+            # 确保score是张量
+            if isinstance(score, list):
+                score = torch.tensor(score).to(image.device).float()
+                
             mask_gt = None
             token_score = None
             var = None
@@ -367,6 +371,10 @@ class FGA_Blip2(Blip2Qformer):
                     return itc_scores.squeeze()
                     
                 score = samples["score"]
+                # 确保score是张量
+                if isinstance(score, list):
+                    score = torch.tensor(score).to(image.device).float()
+                    
                 loss_itc = (itc_scores - score) * (itc_scores - score)
                 loss_itc = loss_itc.mean()
                 
