@@ -113,7 +113,18 @@ def eval(args):
                     
                     mask = torch.tensor(mask).to(device)
                     # 计算元素得分
-                    element_score = ((scores * mask).sum() / mask.sum()).item()
+                    # 确保scores的维度与mask匹配
+                    if scores.size(0) != len(prompt_ids):
+                        # 如果scores维度不匹配，进行调整
+                        # 通常itm_scores的维度是[batch_size, seq_len]
+                        # 我们需要将其调整为与prompt_ids匹配的长度
+                        scores_resized = torch.zeros(len(prompt_ids)).to(device)
+                        # 复制可用的分数
+                        min_len = min(scores.size(0), len(prompt_ids))
+                        scores_resized[:min_len] = scores[0, :min_len]
+                        element_score = ((scores_resized * mask).sum() / mask.sum()).item()
+                    else:
+                        element_score = ((scores[0] * mask).sum() / mask.sum()).item()
                     elements_score[element] = element_score
                 else:
                     elements_score[element] = 0
