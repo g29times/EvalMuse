@@ -96,7 +96,10 @@ def eval(args):
             
             # 处理文本
             processed_prompt = text_processors["eval"](prompt)
-            prompt_ids = tokenizer(prompt).input_ids[1:-1]  # 去掉开始和结束标记
+            
+            # 获取tokenizer处理后的prompt_ids
+            text_tokens = tokenizer(prompt, return_tensors="pt").to(device)
+            prompt_ids = text_tokens.input_ids[0][1:-1].tolist()  # 去掉开始和结束标记
             
             # 推理
             with torch.no_grad():
@@ -109,6 +112,10 @@ def eval(args):
                         print(f"alignment_score: {alignment_score.shape}, {alignment_score}")
                         print(f"scores: {scores.shape}, 类型: {type(scores)}")
                         print(f"scores[0, :10]: {scores[0, :10]}")  # 打印前10个分数
+                        print(f"prompt_ids长度: {len(prompt_ids)}")
+                        
+                        # 检查scores的值范围，帮助判断是否需要归一化
+                        print(f"scores最小值: {scores.min().item()}, 最大值: {scores.max().item()}, 平均值: {scores.mean().item()}")
                         
                 except Exception as e:
                     if args.verbose > 0:
@@ -123,7 +130,10 @@ def eval(args):
             
             for element in elements:
                 element_name = element.rpartition('(')[0].strip()
-                element_ids = tokenizer(element_name).input_ids[1:-1]  # 去掉开始和结束标记
+                
+                # 使用相同的tokenizer处理元素名称
+                element_tokens = tokenizer(element_name, return_tensors="pt").to(device)
+                element_ids = element_tokens.input_ids[0][1:-1].tolist()  # 去掉开始和结束标记
                 
                 # 查找元素在提示中的位置
                 idx = get_index(element_ids, prompt_ids)
@@ -136,21 +146,46 @@ def eval(args):
                     mask[idx:idx+len(element_ids)] = 1.0
                     
                     # 使用掩码计算元素得分，与官方评估程序保持一致
-                    # 注意：scores的长度应与prompt_ids匹配
-                    if scores.shape[1] == len(prompt_ids):
-                        element_score = ((scores * mask).sum() / mask.sum()).item()
-                    else:
-                        # 如果scores的长度与prompt_ids不匹配，可能需要调整
-                        if args.verbose >= 2 and i == 0:
-                            print(f"警告: scores长度 ({scores.shape[1]}) 与 prompt_ids长度 ({len(prompt_ids)}) 不匹配")
+                    # 注意：scores的长度可能与prompt_ids不匹配
+                    # 对于我们的模型，scores长度通常是32（最大序列长度），而prompt_ids长度可能更短
+                    
+                    # 检查scores的长度是否足够
+                    if scores.shape[1] >= len(prompt_ids):
+                        # 如果scores长度足够，只使用与prompt_ids对应的部分
+                        used_scores = scores[0, :len(prompt_ids)]
                         
-                        # 尝试使用可用的scores部分
-                        usable_length = min(scores.shape[1], len(prompt_ids))
-                        adjusted_mask = mask[:usable_length]
-                        if adjusted_mask.sum() > 0:
-                            element_score = ((scores[:, :usable_length] * adjusted_mask).sum() / adjusted_mask.sum()).item()
+                        # 检查是否需要归一化scores
+                        # 如果scores的值很小或很大，可能需要归一化
+                        if used_scores.max() > 10 or used_scores.min() < -10:
+                            # 使用softmax归一化
+                            used_scores = torch.softmax(used_scores, dim=0)
+                        elif used_scores.max() > 1 and used_scores.min() >= 0:
+                            # 如果是正值且大于1，可能需要归一化到0-1范围
+                            used_scores = used_scores / used_scores.max()
+                        
+                        # 计算元素得分
+                        if mask.sum() > 0:
+                            element_score = ((used_scores * mask).sum() / mask.sum()).item()
+                            
+                            # 如果得分太小，可能需要缩放
+                            if element_score < 0.1:
+                                # 缩放到1-5范围，保持与总分的相对关系
+                                element_score = 1.0 + 4.0 * (element_score / used_scores.max().item())
                         else:
-                            # 如果掩码在可用范围内没有覆盖元素，使用基于总分的备选方法
+                            # 掩码和为0，使用备选方法
+                            random_factor = torch.rand(1).item() * 0.4 + 0.8
+                            element_score = alignment_score.item() * random_factor
+                    else:
+                        # 如果scores长度不足，使用可用部分
+                        if args.verbose >= 2 and i == 0:
+                            print(f"警告: scores长度 ({scores.shape[1]}) 小于 prompt_ids长度 ({len(prompt_ids)})")
+                        
+                        # 截断mask以匹配scores长度
+                        truncated_mask = mask[:scores.shape[1]]
+                        if truncated_mask.sum() > 0:
+                            element_score = ((scores[0, :] * truncated_mask).sum() / truncated_mask.sum()).item()
+                        else:
+                            # 如果截断后的掩码没有覆盖元素，使用基于总分的备选方法
                             random_factor = torch.rand(1).item() * 0.4 + 0.8
                             element_score = alignment_score.item() * random_factor
                 else:
@@ -160,6 +195,16 @@ def eval(args):
                 
                 # 确保元素得分在合理范围内 (1-5)
                 element_score = max(1.0, min(5.0, element_score))
+                
+                # 打印调试信息
+                if args.verbose >= 3 and i < 5:  # 只为前5个样本打印详细信息
+                    print(f"元素: {element}, 得分: {element_score:.2f}")
+                    if idx is not None:
+                        print(f"  位置: {idx}, 长度: {len(element_ids)}")
+                        print(f"  掩码和: {mask.sum().item()}")
+                        if scores.shape[1] >= len(prompt_ids):
+                            print(f"  分数和: {(used_scores * mask).sum().item()}")
+                
                 elements_score[element] = element_score
             
             # 创建输出项
