@@ -60,12 +60,21 @@ def eval(args):
         batch_captions = []
         
         for item in batch_data:
-            image_path = os.path.join(args.dataset_dir, item['image'])
+            # 根据数据格式调整图像路径获取方式
+            if 'img_path' in item:
+                image_path = os.path.join(args.dataset_dir, item['img_path'])
+            else:
+                print(f"警告: 数据项缺少img_path字段: {item}")
+                continue
+                
             image = Image.open(image_path).convert('RGB')
             processed_image = vis_processors["eval"](image).to(device)
             batch_images.append(processed_image)
             batch_captions.append(item['prompt'])
         
+        if not batch_images:
+            continue
+            
         # 堆叠批次图像
         batch_images = torch.stack(batch_images)
         
@@ -80,12 +89,23 @@ def eval(args):
         
         # 保存结果
         for j, item in enumerate(batch_data):
-            score = scores[j] if j < len(scores) else 0
-            results.append({
-                "image": item['image'],
-                "prompt": item['prompt'],
-                "score": score
-            })
+            if j >= len(scores):
+                continue
+                
+            score = scores[j]
+            
+            # 创建与原始数据格式相同的结果项
+            result_item = item.copy()
+            result_item["total_score"] = score
+            
+            # 如果有元素得分字段，为每个元素设置得分
+            if "element_score" in item and item["element_score"]:
+                for element in result_item["element_score"]:
+                    # 这里我们简单地将总分作为每个元素的分数
+                    # 实际应用中可能需要更复杂的元素级评分逻辑
+                    result_item["element_score"][element] = score
+            
+            results.append(result_item)
     
     # 保存结果
     with open(args.save_path, 'w') as f:
@@ -97,8 +117,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_file', type=str, default='dataset/test.json')
     parser.add_argument('--save_path', type=str, default='results/result.json')
-    parser.add_argument('--model_path', type=str, default='checkpoints/best.pth')
+    parser.add_argument('--model_path', type=str, default='lavis/output/FGA-BLIP2/20250314051/checkpoint_2.pth')
     parser.add_argument('--dataset_dir', type=str, default='dataset/images/')
-    parser.add_argument('--batch_size', type=int, default=16, help='批处理大小，根据GPU利用率调整')
+    parser.add_argument('--batch_size', type=int, default=32, help='批处理大小，根据GPU利用率调整')
     args = parser.parse_args()
     eval(args)
