@@ -182,8 +182,15 @@ class FGA_Blip2(Blip2Qformer):
 
     def compute_itm(self, image_feat, text_feat, query_token_len, mask):
         itm_scores = torch.bmm(image_feat, text_feat.transpose(1, 2))
-        itm_scores = itm_scores[:, query_token_len:, :] - itm_scores[:, :query_token_len, :]
-        itm_scores = itm_scores[:, :, 0]
+        
+        # 检查维度是否合适进行分割
+        if itm_scores.size(1) > query_token_len and query_token_len > 0:
+            itm_scores = itm_scores[:, query_token_len:, :] - itm_scores[:, :query_token_len, :]
+            itm_scores = itm_scores[:, :, 0]
+        else:
+            # 如果维度不合适，直接使用原始分数
+            itm_scores = itm_scores[:, :, 0]
+        
         itm_score = itm_scores.mean(dim=1) * 4 + 1
 
         return itm_score, itm_scores
@@ -314,82 +321,53 @@ class FGA_Blip2(Blip2Qformer):
             
             return BlipOutput(loss=loss_itm, loss_itm=loss_itm)
 
-            ############## stage 2 #################
-            # text_output = self.Qformer.bert(
-            #     text.input_ids,
-            #     attention_mask=text.attention_mask,
-            #     return_dict=True,
-            # )
-            # # breakpoint()
+        elif match_head == "itc":
+            with self.maybe_autocast():
+                image_embeds = self.ln_vision(self.visual_encoder(image))
+                image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(
+                    image.device
+                )
+                
+                query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
-            # mask = self.mask_proj(text_output.last_hidden_state).squeeze(dim=2)
-            # # print(mask[0])
-            # weight = self.weight_proj(itm_embeddings).squeeze(dim=2)
-            # weight = weight * torch.cat([torch.ones(mask.shape).to(mask.device),mask.detach() > 0.5],dim=1)
+                query_output = self.Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=image_embeds,
+                    encoder_attention_mask=image_atts,
+                    return_dict=True,
+                )
+                image_feats = F.normalize(
+                    self.vision_proj(query_output.last_hidden_state), dim=-1
+                )
 
-            # itm_score = (itm_scores * weight).sum(dim=1) / weight.sum(dim=1) * 4 + 1
-            # # itm_score = itm_scores[:, :query_tokens.size(1)].mean(dim=1) * 4 + 1
-            # # itm_score = (itm_scores * mask).sum(dim=1) / mask.sum(dim=1) * 4 + 1
-            # # itm_logit = (itm_logit * mask).sum(dim=1) / mask.sum(dim=1)
-            # # breakpoint()
-            # # itm_scores = torch.nn.functional.softmax(itm_logit, dim=1) * 4 + 1
-            
-            # # itm_scores = self.mlp(itm_embeddings).mean(dim=1) * 4 + 1
-            # if inference:
-            #     return itm_score 
-            # l1_loss = torch.nn.L1Loss(reduction='mean')
-            # loss_itm = torch.mean(torch.exp(var) * (torch.abs(itm_score - score))) + l1_loss(mask, mask_gt)
-            # # loss_itm = (itm_scores[:, 1] - score) * (itm_scores[:, 1] - score)
-            # # breakpoint()
-            # # loss_itm = loss_itm.mean()
-            # return BlipOutput(loss=loss_itm, loss_itm=loss_itm)        elif match_head == "itc":
-            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+                # 处理文本输入 - 修复错误
+                text = self.tokenizer(
+                    caption,
+                    padding="max_length",
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
 
-            query_output = self.Qformer.bert(
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                return_dict=True,
-            )
-            image_feats = F.normalize(
-                self.vision_proj(query_output.last_hidden_state), dim=-1
-            )
+                text_output = self.Qformer.bert(
+                    text.input_ids,
+                    attention_mask=text.attention_mask,
+                    return_dict=True,
+                )
+                
+                text_feat = F.normalize(
+                    self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
+                )
 
-            # 处理文本输入 - 修复错误
-            text = self.tokenizer(
-                caption,
-                padding="max_length",
-                truncation=True,
-                max_length=self.max_txt_len,
-                return_tensors="pt",
-            ).to(image.device)
-
-            text_output = self.Qformer.bert(
-                text.input_ids,
-                attention_mask=text.attention_mask,
-                return_dict=True,
-            )
-            # text_feat = F.normalize(
-            #     self.text_proj(text_output.last_hidden_state), dim=-1
-            # )
-            
-            # mask = self.mask_proj(text_output.last_hidden_state)
-            # mask = torch.softmax(mask.squeeze(), dim=1)
-            # sims = torch.bmm(image_feats, text_feat.transpose(1, 2))
-            # sims, _ = torch.max(sims, dim=1)
-            # sim = torch.sum(sims * mask, dim=1)
-
-            text_feat = F.normalize(
-                self.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
-            )
-
-            sims = torch.bmm(image_feats, text_feat.unsqueeze(-1))
-            sim, _ = torch.max(sims, dim=1)
-            itc_scores = sim * 5
-            if inference:
-                # print(itc_scores.shape)
-                return itc_scores.squeeze()
-            loss_itc = (itc_scores - score) * (itc_scores - score)
-            # print(loss_itc.shape)
-            loss_itc = loss_itc.mean()
-            return BlipOutput(loss=loss_itc, loss_itc=loss_itc)
+                sims = torch.bmm(image_feats, text_feat.unsqueeze(-1))
+                sim, _ = torch.max(sims, dim=1)
+                
+                itc_scores = sim * 5
+                if inference:
+                    return itc_scores.squeeze()
+                    
+                score = samples["score"]
+                loss_itc = (itc_scores - score) * (itc_scores - score)
+                loss_itc = loss_itc.mean()
+                
+                return BlipOutput(loss=loss_itc, loss_itc=loss_itc)
