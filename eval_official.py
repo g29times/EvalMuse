@@ -106,17 +106,20 @@ def eval(args):
                 try:
                     alignment_score, scores = model.element_score(processed_image.unsqueeze(0), [prompt])
                     
-                    # 打印分数信息用于调试
                     if args.verbose >= 2 and i == 0:
-                        print(f"\n调试信息 - 分数格式:")
                         print(f"alignment_score: {alignment_score.shape}, {alignment_score}")
                         print(f"scores: {scores.shape}, 类型: {type(scores)}")
-                        print(f"scores[0, :10]: {scores[0, :10]}")  # 打印前10个分数
-                        print(f"prompt_ids长度: {len(prompt_ids)}")
+                        print(f"scores[0, :10]: {scores[0, :10]}")
                         
-                        # 检查scores的值范围，帮助判断是否需要归一化
-                        print(f"scores最小值: {scores.min().item()}, 最大值: {scores.max().item()}, 平均值: {scores.mean().item()}")
-                        
+                    # 检查scores是否为tensor
+                    if isinstance(scores, torch.Tensor):
+                        if args.verbose >= 2 and i == 0:
+                            min_score = scores.min().item()
+                            max_score = scores.max().item()
+                            mean_score = scores.mean().item()
+                            print(f"prompt_ids长度: {len(prompt_ids)}")
+                            print(f"scores最小值: {min_score}, 最大值: {max_score}, 平均值: {mean_score}")
+                
                 except Exception as e:
                     if args.verbose > 0:
                         print(f"错误: 使用element_score方法出错: {e}")
@@ -130,53 +133,49 @@ def eval(args):
             
             for element in elements:
                 element_name = element.rpartition('(')[0].strip()
+                element_type = element.rpartition('(')[2].rstrip(')')
                 
-                # 使用相同的tokenizer处理元素名称
-                element_tokens = tokenizer(element_name, return_tensors="pt").to(device)
-                element_ids = element_tokens.input_ids[0][1:-1].tolist()  # 去掉开始和结束标记
+                # 获取元素的token ids
+                element_ids = tokenizer.encode(element_name, add_special_tokens=False)
                 
-                # 查找元素在提示中的位置
+                # 在prompt_ids中查找element_ids
                 idx = get_index(element_ids, prompt_ids)
                 
                 if idx is not None:
                     found_elements += 1
                     
-                    # 创建掩码，标记元素在提示中的位置
-                    mask = torch.zeros(len(prompt_ids)).to(device)
-                    mask[idx:idx+len(element_ids)] = 1.0
-                    
-                    # 使用掩码计算元素得分，与官方评估程序保持一致
-                    # 注意：scores的长度可能与prompt_ids不匹配
-                    # 对于我们的模型，scores长度通常是32（最大序列长度），而prompt_ids长度可能更短
-                    
-                    # 检查scores的长度是否足够
-                    if scores.shape[1] >= len(prompt_ids):
-                        # 如果scores长度足够，只使用与prompt_ids对应的部分
-                        used_scores = scores[0, :len(prompt_ids)]
+                    # 根据官方实现，直接使用对应位置的scores作为元素得分
+                    # 注意：官方实现中，scores是从query_tokens.size(1)开始的文本token得分
+                    if idx < scores.shape[1]:
+                        # 如果元素的起始位置在scores范围内
+                        # 计算元素对应位置的平均分数
+                        element_score_sum = 0.0
+                        valid_tokens = 0
                         
-                        # 直接使用模型返回的对应位置的分数
-                        if mask.sum() > 0:
-                            # 获取元素对应位置的平均分数
-                            element_score = ((used_scores * mask).sum() / mask.sum()).item()
-                            
-                            # 确保元素得分在0-1范围内
-                            element_score = max(0.0, min(1.0, element_score))
+                        for j in range(len(element_ids)):
+                            if idx + j < scores.shape[1]:
+                                element_score_sum += scores[0, idx + j].item()
+                                valid_tokens += 1
+                        
+                        if valid_tokens > 0:
+                            element_score = element_score_sum / valid_tokens
                         else:
-                            # 掩码和为0，使用默认得分
-                            element_score = 0.5
+                            element_score = 0.0
+                        
+                        # 确保元素得分在0-1范围内
+                        element_score = max(0.0, min(1.0, element_score))
+                        
+                        # 打印详细调试信息
+                        if args.verbose >= 3 and i < 5:
+                            print(f"  元素: {element_name} ({element_type})")
+                            print(f"  位置: {idx}, 长度: {len(element_ids)}")
+                            print(f"  有效token数: {valid_tokens}")
+                            print(f"  元素得分: {element_score:.4f}")
                     else:
-                        # 如果scores长度不足，使用可用部分
+                        # 如果元素的起始位置超出scores范围
                         if args.verbose >= 2 and i == 0:
-                            print(f"警告: scores长度 ({scores.shape[1]}) 小于 prompt_ids长度 ({len(prompt_ids)})")
-                        
-                        # 截断mask以匹配scores长度
-                        truncated_mask = mask[:scores.shape[1]]
-                        if truncated_mask.sum() > 0:
-                            element_score = ((scores[0, :] * truncated_mask).sum() / truncated_mask.sum()).item()
-                            element_score = max(0.0, min(1.0, element_score))
-                        else:
-                            # 如果截断后的掩码没有覆盖元素，使用默认得分
-                            element_score = 0.5
+                            print(f"警告: 元素'{element_name}'的位置({idx})超出scores范围({scores.shape[1]})")
+                        element_score = 0.0
                 else:
                     # 元素未找到，给一个默认得分
                     element_score = 0.0
