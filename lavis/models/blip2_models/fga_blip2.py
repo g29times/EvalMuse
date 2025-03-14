@@ -147,9 +147,18 @@ class FGA_Blip2(Blip2Qformer):
                 self.vision_proj(query_output.last_hidden_state), dim=-1
             )
 
+            # 处理文本输入 - 修复错误
+            text = self.tokenizer(
+                caption,
+                padding="max_length",
+                truncation=True,
+                max_length=self.max_txt_len,
+                return_tensors="pt",
+            ).to(image.device)
+
             text_output = self.Qformer.bert(
-                caption.input_ids,
-                attention_mask=caption.attention_mask,
+                text.input_ids,
+                attention_mask=text.attention_mask,
                 return_dict=True,
             )
             text_feat = F.normalize(
@@ -232,9 +241,18 @@ class FGA_Blip2(Blip2Qformer):
                     self.vision_proj(query_output.last_hidden_state), dim=-1
                 )
 
+                # 处理文本输入 - 修复错误
+                text = self.tokenizer(
+                    caption,
+                    padding="max_length",
+                    truncation=True,
+                    max_length=self.max_txt_len,
+                    return_tensors="pt",
+                ).to(image.device)
+
                 text_output = self.Qformer.bert(
-                    caption.input_ids,
-                    attention_mask=caption.attention_mask,
+                    text.input_ids,
+                    attention_mask=text.attention_mask,
                     return_dict=True,
                 )
                 text_feat = F.normalize(
@@ -337,9 +355,18 @@ class FGA_Blip2(Blip2Qformer):
                 self.vision_proj(query_output.last_hidden_state), dim=-1
             )
 
+            # 处理文本输入 - 修复错误
+            text = self.tokenizer(
+                caption,
+                padding="max_length",
+                truncation=True,
+                max_length=self.max_txt_len,
+                return_tensors="pt",
+            ).to(image.device)
+
             text_output = self.Qformer.bert(
-                caption.input_ids,
-                attention_mask=caption.attention_mask,
+                text.input_ids,
+                attention_mask=text.attention_mask,
                 return_dict=True,
             )
             # text_feat = F.normalize(
@@ -358,7 +385,6 @@ class FGA_Blip2(Blip2Qformer):
 
             sims = torch.bmm(image_feats, text_feat.unsqueeze(-1))
             sim, _ = torch.max(sims, dim=1)
-
             itc_scores = sim * 5
             if inference:
                 # print(itc_scores.shape)
